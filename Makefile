@@ -1,6 +1,7 @@
 DIRS := . ../utils
 INCLUDE := $(addsuffix /include,$(DIRS))
 SRC := src
+PROJECTS := . ast
 WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
 	ignored-qualifiers switch-enum strict-aliasing=3 \
 	alloca array-bounds shadow pointer-arith uninitialized \
@@ -13,8 +14,7 @@ LDFLAGS := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
 LTO ?= 0
 DEBUG ?= 1
 CC := $$HOME/gcc-installs/usr/local/bin/gcc
-BINS := tests
-BIN ?= tests
+BIN := main
 
 ifeq ($(DEBUG), 1)
 	OUTPUT := output/debug
@@ -27,27 +27,25 @@ ifeq ($(LTO), 1)
 	CFLAGS += -flto -fwhole-program
 endif
 
-MAINS   = $(patsubst %,$(SRC)/%.c,$(filter-out $(BIN),$(BINS)))
-SOURCES = $(filter-out $(MAINS),$(wildcard $(SRC)/*.c))
+SOURCES = $(foreach PROJ,$(PROJECTS),$(wildcard $(SRC)/$(PROJ)/*.c))
 OBJECTS = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.o,$(SOURCES))
-DEPS = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.d,$(SOURCES))
+DEPS    = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.d,$(SOURCES))
 
 $(OUTPUT)/$(BIN): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-run: $(OUTPUT)/$(BIN)
-	./$<
-
-debug: $(OUTPUT)/$(BIN)
-	gdb $<
-
 -include $(DEPS)
-
-$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c
+$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c $(OUTPUT)/%.d
 	$(CC) $(CFLAGS) -MMD -c -o $@ $<
 
-.PHONY: clean
+OUTDIRS = output $(OUTPUT) $(foreach PROJ,$(PROJECTS),$(OUTPUT)/$(PROJ))
+$(OUTDIRS): %:
+	-mkdir $@
 
+$(DEPS): $(OUTPUT)/%.d: $(OUTDIRS)
+$(OUTPUT)/%.d: ;
+
+.PHONY: clean
 clean:
-	-rm $(OUTPUT)/*
+	-rm -rf $(OUTPUT)/*
 
