@@ -1,11 +1,9 @@
 # Translation steps:
 
-1. pre-preprocessing (lx)
+1. preprocessing (pp)
 	* trigraph expansion
 	* backslash-newlines discarded
 	* assert file ends with non-escaped newline
-
-2. preprocessing (pp)
 	* decomposition in pp-tokens
 	* comments discarded
 	* newlines kept
@@ -16,18 +14,18 @@
 	* escape-sequence expansion
 	* string-literal concatenation
 
-3. compilation (uwu)
+2. compilation (uwu)
 	* tokenization
 	* syntactic analysis
 	* parsing
 	* semantic analysis
 
-4. linking (uld)
+3. linking (uld)
 	* external object/function reference resolution
 	* other library object/functions linking
 	* creation of an executable image
 
-5. execution
+4. execution
 	* static initialization before any call to a C-function
 	* in `int main(int argc, char **argv) { /* ... */ }`:
 		* argc > 0
