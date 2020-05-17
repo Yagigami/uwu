@@ -1,6 +1,6 @@
-DIRS := . ../utils
-INCLUDE := $(addsuffix /include,$(DIRS))
-SRC := src
+DIRS     := . ../utils
+INCLUDE  := $(addsuffix /include,$(DIRS))
+SRC      := src
 PROJECTS := . ast
 WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
 	ignored-qualifiers switch-enum strict-aliasing=3 \
@@ -8,13 +8,13 @@ WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
 	aggregate-return strict-prototypes redundant-decls \
 	parentheses unreachable-code missing-field-initializers \
 	unused
-CFLAGS := -std=c99 -ggdb3 -fPIC $(addprefix -I,$(INCLUDE)) $(addprefix -W,$(WARNINGS))
-LIBS := :output/utils.a
-LDFLAGS := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
-LTO ?= 0
-DEBUG ?= 1
-CC := $$HOME/gcc-installs/usr/local/bin/gcc
-BIN := main
+CFLAGS   := -std=c99 -ggdb3 -fPIC $(addprefix -I,$(INCLUDE)) $(addprefix -W,$(WARNINGS))
+LIBS     := :output/utils.a
+LDFLAGS  := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
+LTO      ?= 0
+DEBUG    ?= 1
+CC       := $$HOME/gcc-installs/usr/local/bin/gcc
+BIN      := main
 
 ifeq ($(DEBUG), 1)
 	OUTPUT := output/debug
@@ -30,22 +30,19 @@ endif
 SOURCES = $(foreach PROJ,$(PROJECTS),$(wildcard $(SRC)/$(PROJ)/*.c))
 OBJECTS = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.o,$(SOURCES))
 DEPS    = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.d,$(SOURCES))
+OUTDIRS = output $(OUTPUT) $(foreach PROJ,$(PROJECTS),$(OUTPUT)/$(PROJ))
 
-$(OUTPUT)/$(BIN): $(OBJECTS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+$(OUTPUT)/$(BIN): $(OUTDIRS) $(OBJECTS)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
 -include $(DEPS)
-$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c $(OUTPUT)/%.d
+$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c
 	$(CC) $(CFLAGS) -MMD -c -o $@ $<
 
-OUTDIRS = output $(OUTPUT) $(foreach PROJ,$(PROJECTS),$(OUTPUT)/$(PROJ))
-$(OUTDIRS): %:
+$(OUTDIRS):
 	-mkdir $@
-
-$(DEPS): $(OUTPUT)/%.d: $(OUTDIRS)
-$(OUTPUT)/%.d: ;
 
 .PHONY: clean
 clean:
-	-rm -rf $(OUTPUT)/*
+	-rm -rf $(OUTPUT)
 
