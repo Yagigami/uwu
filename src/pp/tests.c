@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #include "pp/tests.h"
-#include "pp/pre.h"
+#include "pp/translate.h"
 #include "stream/stream.h"
 
 void pp_test(void) {
@@ -11,14 +11,10 @@ void pp_test(void) {
 	if (!stream) {
 		fprintf(stderr, "could not initialize stream from `%s`.\n", "foo.c");
 	}
-	char *ppline;
-	long pplen, linecnt=0, jmps;
-
-	while ((ppline = discard_bsnl(stream, &pplen, &jmps))) {
-		printf("%ld:\t%.*s", linecnt, (int)pplen, ppline);
-		linecnt += jmps;
-		free(ppline);
+	Stream out = preprocess(stream);
+	if (!out) {
+		fprintf(stderr, "could not preprocess stream from `%s`.\n", "foo.c");
 	}
-	stream_fini(stream);
+	stream_fini(out);
 }
 

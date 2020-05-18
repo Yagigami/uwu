@@ -5,9 +5,7 @@
 #include "pp/definition.h"
 #include "pp/common.h"
 #include "pp/tests.h"
-#include "stream/stream.h"
-
-Stream preprocess(Stream stream);
+#include "pp/translate.h"
 
 #endif /* C_PP_H */
 
