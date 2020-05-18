@@ -13,15 +13,22 @@ LIBS     :=
 LDFLAGS  := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
 LTO      ?= 0
 DEBUG    ?= 1
+SAN      ?= address leak undefined
+EMPTY    :=
+SPACE    := $(EMPTY) $(EMPTY)
+COMMA    := ,
 CC       := $$HOME/gcc-installs/usr/local/bin/gcc
 BIN      := main
 
 ifeq ($(DEBUG), 1)
 	OUTPUT := output/debug
-	CFLAGS += -fsanitize=address,leak,undefined -fanalyzer
+	CFLAGS += -fanalyzer
 else
 	OUTPUT := output/release
 	CFLAGS += -O3 -D NDEBUG
+endif
+ifneq ($(words $(SAN)),0)
+	CFLAGS += -fsanitize=$(subst $(SPACE),$(COMMA),$(SAN))
 endif
 ifeq ($(LTO), 1)
 	CFLAGS += -flto -fwhole-program
