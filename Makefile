@@ -1,7 +1,7 @@
 DIRS     := . ../utils
 INCLUDE  := $(addsuffix /include,$(DIRS))
 SRC      := src
-PROJECTS := . ast
+PROJECTS = . ast pp uwu uld stream
 WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
 	ignored-qualifiers switch-enum strict-aliasing=3 \
 	alloca array-bounds shadow pointer-arith uninitialized \
