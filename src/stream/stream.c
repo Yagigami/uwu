@@ -77,28 +77,30 @@ long stream_write(Stream stream, const char *buf, long size) {
 }
 
 char *stream_getline(Stream stream, long *len) {
-	char *try = NULL, *last, *nl;
-	unsigned long cap, new_cap = 8;
-	try = malloc(new_cap);
-	if (!try) goto early;
-	if (!fgets(try, new_cap, stream->f)) goto eof;
+	char *try, *last, *nl;
+	unsigned long cap, new_cap=8;
+	last = try = malloc(new_cap);
+	if (!try) goto err;
+	if (!fgets(try, new_cap, stream->f)) {
+		if (feof(stream->f)) goto nomem;
+		if (len) *len = strlen(try);
+		return try;
+	}
 	while (!(nl = strchr(try, '\n'))) {
-		last = try;
 		cap = new_cap;
-		try = malloc(new_cap = cap*2);
+		try = realloc(last, new_cap=cap*2);
 		if (!try) goto nomem;
-		memcpy(try, last, cap-1);
-		free(last);
-		if (!fgets(try+cap-1, cap+1, stream->f)) goto eof;
+		last = try;
+		if (!fgets(try+cap-1, cap+1, stream->f)) {
+			if (len) *len = strlen(try);
+			return try;
+		}
 	}
 	if (len) *len = nl+1-try;
 	return try;
 nomem:
 	free(last);
-eof:
-	free(try);
-early:
+err:
 	if (len) *len = 0;
 	return NULL;
 }
-
