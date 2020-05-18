@@ -15,7 +15,7 @@ char *expand_trigraphs(char *line, long len, long *new_len) {
 		memcpy(new_cur, last_cur, off);
 		new_cur += off;
 		last_cur = cur+3;
-		if (cur) switch (cur[2]) {
+		switch (cur[2]) {
 		case '=':
 			*new_cur = '#';
 			break;
@@ -46,6 +46,7 @@ char *expand_trigraphs(char *line, long len, long *new_len) {
 		default:
 			memcpy(new_cur, "??", 2);
 			new_cur[2] = cur[2];
+			new_cur += 2;
 			break;
 		}
 		new_cur++;
