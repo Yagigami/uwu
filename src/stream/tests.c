@@ -1,8 +1,7 @@
 #include "stream/stream.h"
 
 #include <stdio.h>
-
-#include "alloc.h"
+#include <stdlib.h>
 
 void stream_test(void) {
 	printf("stream:\n");
@@ -14,7 +13,7 @@ void stream_test(void) {
 	long len;
 	while ((line = stream_getline(stream, &len))) {
 		printf("[%-4zd]\t%.*s\n", len, (int)(len-1), line);
-		mem_free(line);
+		free(line);
 	}
 	stream_fini(stream);
 }

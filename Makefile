@@ -1,4 +1,4 @@
-DIRS     := . ../utils
+DIRS     := .
 INCLUDE  := $(addsuffix /include,$(DIRS))
 SRC      := src
 PROJECTS = . ast pp uwu uld stream
@@ -9,7 +9,7 @@ WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
 	parentheses unreachable-code missing-field-initializers \
 	unused
 CFLAGS   := -std=c99 -ggdb3 -fPIC $(addprefix -I,$(INCLUDE)) $(addprefix -W,$(WARNINGS))
-LIBS     := :output/utils.a
+LIBS     := 
 LDFLAGS  := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
 LTO      ?= 0
 DEBUG    ?= 1
