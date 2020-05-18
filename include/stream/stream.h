@@ -13,7 +13,10 @@ void stream_test(void);
 Stream stream_init(const char *title, int mode);
 void stream_fini(Stream stream);
 
-const char *stream_name(Stream stream);
+const char *stream_name(Stream stream, long *len);
+const char *stream_basename(Stream stream, long *len);
+const char *stream_extension(Stream stream, long *len);
+
 long stream_read(Stream stream, char *buf, long size);
 long stream_write(Stream stream, const char *buf, long size);
 char *stream_getline(Stream stream, long *len);

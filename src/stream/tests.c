@@ -10,7 +10,14 @@ void stream_test(void) {
 		fprintf(stderr, "couldn't initialize stream from `%s`.\n", "foo.c");
 	}
 	char *line;
+	const char *name;
 	long len;
+	name = stream_name(stream, &len);
+	printf("<%.*s>\n", (int)len, name);
+	name = stream_basename(stream, &len);
+	printf("<%.*s>\n", (int)len, name);
+	name = stream_extension(stream, &len);
+	printf("<%.*s>\n", (int)len, name);
 	while ((line = stream_getline(stream, &len))) {
 		printf("[%-4zd]\t%.*s\n", len, (int)(len-1), line);
 		free(line);
