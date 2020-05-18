@@ -44,8 +44,7 @@ char *expand_trigraphs(char *line, long len, long *new_len) {
 			*new_cur = '~';
 			break;
 		default:
-			memcpy(new_cur, "??", 2);
-			new_cur[2] = cur[2];
+			memcpy(new_cur, cur, 3);
 			new_cur += 2;
 			break;
 		}
