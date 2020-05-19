@@ -8,7 +8,7 @@ typedef struct Stream *Stream;
 #define C_STREAM_TEXT (1<<2)
 #define C_STREAM_BINARY (1<<3)
 
-void stream_test(void);
+int stream_test(void);
 
 Stream stream_init(const char *title, int mode);
 void stream_fini(Stream stream);
@@ -16,6 +16,7 @@ void stream_fini(Stream stream);
 const char *stream_name(Stream stream, long *len);
 const char *stream_basename(Stream stream, long *len);
 const char *stream_extension(Stream stream, long *len);
+long stream_size(Stream stream);
 
 long stream_read(Stream stream, char *buf, long size);
 long stream_write(Stream stream, const char *buf, long size);

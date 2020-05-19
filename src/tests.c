@@ -6,12 +6,13 @@
 
 void run_tests(int argc, char **argv) {
 	(void) argc, (void) argv;
-	void (*tests[]) (void) = {
+	int (*tests[]) (void) = {
 		&stream_test,
 		&pp_test,
 	}, (**end) (void) = tests + sizeof (tests) / sizeof (*tests);
-	for (void (**test) (void) = tests; test != end; test++) {
-		(*test)();
+	for (int (**test) (void) = tests; test != end; test++) {
+		int err = (*test)();
+		printf("[exit status = %d]\n", err);
 		printf("\n\n");
 	}
 }
