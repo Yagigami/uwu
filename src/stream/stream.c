@@ -10,6 +10,7 @@ struct Stream {
 	char *name;
 	char *ext;
 	long len;
+	long size;
 	FILE *f;
 };
 
@@ -32,6 +33,9 @@ Stream stream_init(const char *title, int mode) {
 
 	stream->f = fopen(title, mode_str);
 	if (!stream->f) goto release;
+
+	stream->size = 0;
+	stream->size = stream_size(stream);
 
 	char *dot = strrchr(stream->name, '.');
 	stream->ext = dot && dot != stream->name ? dot: stream->name+l;
@@ -66,6 +70,15 @@ const char *stream_basename(Stream stream, long *len) {
 const char *stream_extension(Stream stream, long *len) {
 	if (len) *len = stream->len - (stream->ext - stream->name);
 	return stream->ext;
+}
+
+long stream_size(Stream stream) {
+	if (stream->size) return stream->size;
+	long pos = ftell(stream->f);
+	fseek(stream->f, 0, SEEK_END);
+	stream->size = ftell(stream->f);
+	fseek(stream->f, 0, pos);
+	return stream->size;
 }
 
 long stream_read(Stream stream, char *buf, long size) {
@@ -104,3 +117,5 @@ err:
 	if (len) *len = 0;
 	return NULL;
 }
+
+
