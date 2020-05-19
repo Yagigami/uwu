@@ -50,6 +50,9 @@ char *discard_bsnl(char *buf, long *len) {
 		if (*read   != '\n') continue;
 		insert--;
 		read++;
+		if (*read == '\0') {
+			printf("file ends in a backslash-newline.\n");
+		}
 	}
 	long l=insert-buf;
 	if (len) *len = l;
