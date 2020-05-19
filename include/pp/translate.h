@@ -1,9 +1,9 @@
 #ifndef C_PP_TRANSLATE_H
 #define C_PP_TRANSLATE_H
 
-#include "stream/stream.h"
+#include "pp/pptoken.h"
 
-Stream preprocess(Stream stream);
+int preprocess(struct Preprocessor *pp);
 
 #endif /* C_PP_TRANSLATE_H */
 

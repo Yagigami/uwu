@@ -3,8 +3,11 @@
 
 #include "stream/stream.h"
 
-char *expand_trigraphs(char *line, long len, long *new_len);
-char *discard_bsnl(Stream stream, long *len, long *src_lines);
+char *preprocessor_internalize(char *buf, long *len);
+
+char *expand_trigraphs(char *buf, long *len);
+char *discard_bsnl(char *buf, long *len);
+char *discard_comments(char *buf, long *len);
 
 #endif /* C_PP_PRE_H */
 
