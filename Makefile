@@ -1,8 +1,6 @@
-DIRS     := .
-INCLUDE  := $(addsuffix /include,$(DIRS))
+INCLUDE  := include
 SRC      := src
-PROJECTS = . ast pp uwu uld stream
-WARNINGS := all extra pedantic format=2 format-overflow=2 init-self \
+WARNINGS := all extra format=2 format-overflow=2 init-self \
 	ignored-qualifiers switch-enum strict-aliasing=3 \
 	alloca array-bounds shadow pointer-arith uninitialized \
 	aggregate-return strict-prototypes redundant-decls \
@@ -34,10 +32,10 @@ ifeq ($(LTO), 1)
 	CFLAGS += -flto -fwhole-program
 endif
 
-SOURCES = $(foreach PROJ,$(PROJECTS),$(wildcard $(SRC)/$(PROJ)/*.c))
+SOURCES = $(shell find $(SRC) -type f -name "*.c")
 OBJECTS = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.o,$(SOURCES))
 DEPS    = $(patsubst $(SRC)/%.c,$(OUTPUT)/%.d,$(SOURCES))
-OUTDIRS = output $(OUTPUT) $(foreach PROJ,$(PROJECTS),$(OUTPUT)/$(PROJ))
+OUTDIRS = output $(OUTPUT) $(patsubst $(SRC)/%,$(OUTPUT)/%,$(shell find $(SRC) -type d))
 
 $(OUTPUT)/$(BIN): $(OUTDIRS) $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
