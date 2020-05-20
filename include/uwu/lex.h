@@ -30,19 +30,20 @@ struct InternString {
 
 struct Lexer {
 	char *buf, *cur;
+	long line;
 	struct Token token;
-	const struct Interns *keywords;
 	struct Interns identifiers;
 };
+
+int lexer_init(struct Lexer *lexer, const char *name);
+void lexer_fini(struct Lexer *lexer);
+void lexer_next(struct Lexer *lexer);
+void lexer_dump(const struct Lexer *lexer);
 
 int intern_init(struct Interns *interns);
 void intern_fini(struct Interns *interns);
 const struct InternString *intern_string(struct Interns *interns, const char *str, long len);
 bool intern_contains(const struct Interns *interns, const char *str, long len);
-
-int lexer_init(struct Lexer *lexer, const char *name);
-void lexer_fini(struct Lexer *lexer);
-void lexer_next(struct Lexer *lexer);
 
 #endif /* C_UWU_LEX_H */
 
