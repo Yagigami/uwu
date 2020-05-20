@@ -13,6 +13,15 @@ struct Token {
 	const char *start;
 	int len;
 	__extension__ union {
+		struct {
+			uint32_t value;
+			int width;
+		} character;
+		struct {
+			char *start;
+			int len;
+			int width;
+		} string;
 		uintmax_t integer;
 		long double floating;
 	};
@@ -43,6 +52,7 @@ void lexer_dump(const struct Lexer *lexer);
 int intern_init(struct Interns *interns);
 void intern_fini(struct Interns *interns);
 const struct InternString *intern_string(struct Interns *interns, const char *str, long len);
+const struct InternString *intern_find(const struct Interns *interns, const char *str, long len);
 bool intern_contains(const struct Interns *interns, const char *str, long len);
 
 #endif /* C_UWU_LEX_H */
