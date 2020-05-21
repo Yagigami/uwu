@@ -2,7 +2,7 @@
 #include <uwu/enums.h>
 
 const char *token_detail_to_str[] = {
-	[TOKEN_DETAIL_NONE] = "<unknown>",
+	[TOKEN_DETAIL_NONE] = "x:<END>",
 	[TOKEN_DETAIL_KEYWORD_AUTO] = "k:auto",
 	[TOKEN_DETAIL_KEYWORD_BREAK] = "k:break",
 	[TOKEN_DETAIL_KEYWORD_CASE] = "k:case",
