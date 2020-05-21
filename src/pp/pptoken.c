@@ -17,7 +17,7 @@ int preprocessor_init(struct Preprocessor *pp, const char *name) {
 	pp->len = size;
 	ret = (pp->buf = preprocessor_internalize(pp->buf, &pp->len)) ? 0: -1;
 	pp->cur = pp->buf;
-	pp->pptoken.kind = PREPROCESSING_TOKEN_NONE;
+	// pp->pptoken.kind = PREPROCESSING_TOKEN_NONE;
 io:
 	stream_fini(stream);
 early:

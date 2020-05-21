@@ -50,13 +50,7 @@ const struct InternString *intern_find(const struct Interns *interns, const char
 }
 
 bool intern_contains(const struct Interns *interns, const char *str, long len) {
-	for (long i=0; i<interns->len; i++) {
-		const struct InternString *intern = interns->interns+i;
-		if (len == intern->len && strncmp(str, intern->str, len) == 0) {
-			return true;
-		}
-	}
-	return false;
+	return intern_find(interns, str, len);
 }
 
 int print_interns(const struct Interns *interns) {

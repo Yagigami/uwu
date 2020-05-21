@@ -123,9 +123,9 @@ again:
 	case '"':
 		lex_string(lexer);
 		break;
-	case '.': // can also be the start of a floating constant
+	case '.': // can also be the start of a decimal floating constant
 		if (isdigit(lexer->cur[1])) {
-			lex_string(lexer);
+			lex_floating(lexer, 10);
 		} else {
 			lexer->token.start = lexer->cur++;
 			lexer->token.kind = TOKEN_PUNCTUATOR;
@@ -506,56 +506,45 @@ int char2hex(char c) {
 	return l - '0';
 }
 
+uintmax_t read_integer(char *i, int base, char **endptr) {
+	uintmax_t val = 0;
+	char *c = i;
+	for (; isxdigit(*c); c++) {
+		int d = char2hex(*c);
+		if (d >= base) goto end;
+		uintmax_t next = (val * base) + d;
+		if (next < val) goto end;
+		val = next;
+	}
+	if (endptr) *endptr = c;
+	return val;
+end:
+	if (endptr) *endptr = i;
+	return 0;
+}
+
 void lex_integer(struct Lexer *lexer, int base) {
 	char *start = lexer->cur++, *end = start;
-	uintmax_t val = 0;
 	if (base == 16) {
 		end += 2;
-	} else if (base != 10 && base != 8) {
-		printf("invalid base %d for an integer.\n", base);
-		goto err;
 	}
-	while (isxdigit(*end)) {
-		int i = char2hex(*end);
-		if (i >= base) {
-			printf("digit `%c` is out of range in base %d.\n", *end, base);
-			goto err;
-		}
-		uintmax_t next = (val * base) + i;
-		if (next < val) {
-			printf("constant is too big.\n");
-			goto err;
-		}
-		val = next;
-		end++;
-	}
-	bool usuffix = false, lsuffix = false, llsuffix = false;
-	char suff;
-	while (suff = tolower(*end), suff == 'u' || suff == 'l') {
+	char *out = end;
+	uintmax_t val = read_integer(end, base, &out);
+	if (out == end) goto err;
+	end = out;
+	int usuffix = 0, lsuffix = 0, llsuffix = 0;
+	for (char suff, it = 0; suff = tolower(*end), suff == 'u' || suff == 'l'; end++, it++) {
+		if (it > 64) goto err; // no number is that long, but just incase of a degenerate case
 		if (suff == 'u') {
-			if (usuffix) {
-				printf("integer already has suffix `u`.\n");
-				goto err;
-			} else {
-				usuffix = true;
-			}
+			usuffix++;
 		} else if (suff == 'l') {
 			if (tolower(end[1]) == 'l') {
 				end++;
-				if (llsuffix) {
-					printf("integer already has suffix `ll`.\n");
-					goto err;
-				} else {
-					llsuffix = true;
-				}
-			} else if (lsuffix) {
-				printf("integer already has suffix `l`.\n");
-				goto err;
+				llsuffix++;
 			} else {
-				lsuffix = true;
+				lsuffix++;
 			}
 		}
-		end++;
 	}
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_INTEGER_CONSTANT;
@@ -565,14 +554,14 @@ void lex_integer(struct Lexer *lexer, int base) {
 	lexer->cur = end;
 
 	enum IntegerSuffix suffix;
-	if (!usuffix && !lsuffix && !llsuffix) suffix = INTEGER_SUFFIX_NONE;
-	else if (usuffix && !lsuffix && !llsuffix) suffix = INTEGER_SUFFIX_U;
-	else if (!usuffix && lsuffix && !llsuffix) suffix = INTEGER_SUFFIX_L;
-	else if (!usuffix && !lsuffix && llsuffix) suffix = INTEGER_SUFFIX_LL;
-	else if (usuffix && lsuffix && !llsuffix)  suffix = INTEGER_SUFFIX_UL;
-	else if (usuffix && !lsuffix && llsuffix)  suffix = INTEGER_SUFFIX_ULL;
-	else if (lsuffix && llsuffix) {
-		printf("integer constant contains both `l` and `ll` suffixes.\n");
+	if      (usuffix == 0 && lsuffix == 0 && llsuffix == 0) suffix = INTEGER_SUFFIX_NONE;
+	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 0) suffix = INTEGER_SUFFIX_U;
+	else if (usuffix == 0 && lsuffix == 1 && llsuffix == 0) suffix = INTEGER_SUFFIX_L;
+	else if (usuffix == 0 && lsuffix == 0 && llsuffix == 1) suffix = INTEGER_SUFFIX_LL;
+	else if (usuffix == 1 && lsuffix == 1 && llsuffix == 0) suffix = INTEGER_SUFFIX_UL;
+	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 1) suffix = INTEGER_SUFFIX_ULL;
+	else {
+		printf("invalid integer constant suffix.\n");
 		goto err;
 	}
 	lexer->token.integer.suffix = suffix;
@@ -613,7 +602,11 @@ static int print_token(const struct Token *token) {
 	case TOKEN_CONSTANT:
 		switch (token->detail) {
 		case TOKEN_DETAIL_INTEGER_CONSTANT:
-			prn += printf("%s%ju", token_detail_to_str[token->detail], token->integer.value);
+			prn += printf("%s%ju%s",
+					token_detail_to_str[token->detail],
+					token->integer.value,
+					integer_suffix_to_str[token->integer.suffix]
+			);
 			break;
 		case TOKEN_DETAIL_FLOATING_CONSTANT:
 			prn += printf("%s%Lg", token_detail_to_str[token->detail], token->floating);

@@ -94,3 +94,12 @@ const char *token_detail_to_str[] = {
 	[TOKEN_DETAIL_COMMA] = "p:,",
 };
 
+const char *integer_suffix_to_str[] = {
+	[INTEGER_SUFFIX_NONE] = "-",
+	[INTEGER_SUFFIX_U] = "U",
+	[INTEGER_SUFFIX_L] = "L",
+	[INTEGER_SUFFIX_LL] = "LL",
+	[INTEGER_SUFFIX_UL] = "UL",
+	[INTEGER_SUFFIX_ULL] = "ULL",
+};
+
