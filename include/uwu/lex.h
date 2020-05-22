@@ -20,6 +20,10 @@ struct Token {
 			uint8_t *start;
 			int len;
 		} string;
+		struct {
+			uint32_t *start;
+			int len;
+		} wstring;
 		uintmax_t integer;
 		long double floating;
 	};

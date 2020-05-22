@@ -714,17 +714,73 @@ const uint8_t *lex_floating(struct Lexer *lexer, int base) {
 	return end;
 }
 
-char *lex_wide_character(struct Lexer *lexer) {
-	(void) lexer;
-	return NULL;
+const uint8_t *lex_wide_character(struct Lexer *lexer) {
+	const uint8_t *start = lexer->cur + 1;
+	assert(start[-1] == 'L');
+	uint8_t *out;
+	uint32_t value = read_character(start, true, &out);
+	if (out == start) return NULL;
+	lexer->token.kind = TOKEN_CONSTANT;
+	lexer->token.detail = TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT;
+	lexer->token.character = value;
+	return out;
 }
 
-char *lex_wide_string(struct Lexer *lexer) {
-	(void) lexer;
-	return NULL;
+ptrdiff_t string_lit_len_wide(const uint8_t *str, uint32_t boundary, uint8_t **endptr) {
+	assert(*str == boundary);
+	const uint8_t *start = str + 1, *end = start;
+	ptrdiff_t len = 0;
+	while (*end && *end != '\n' && *end != boundary) {
+		len++;
+		if (*end++ != '\\') continue;
+		uint8_t *out;
+		read_escape_sequence(end, &out);
+		end = out;
+	}
+	if (*end == '\0' || *end == '\n') len = -1;
+	assert(*end == boundary);
+	end++;
+	if (endptr) *endptr = (uint8_t *) end;
+	return len;
 }
 
-static int print_token(const struct Token *token) {
+void encode_wide(uint32_t *out, uint32_t boundary, const uint8_t *in) {
+	assert(*in == boundary);
+	in++;
+	for (uint32_t *c = out; *in != boundary; c++) {
+		*c = *in;
+		if (*in == '\0' || *in == '\n') __builtin_unreachable();
+		if (*in++ != '\\') continue;
+		uint8_t *end;
+		uint32_t cp = read_escape_sequence(in, &end);
+		in = end;
+		*c = cp;
+	}
+}
+
+const uint8_t *lex_wide_string(struct Lexer *lexer) {
+	const uint8_t *start = lexer->cur + 1, *end;
+	uint8_t *out;
+	assert(start[-1] == 'L');
+	ptrdiff_t len = string_lit_len_wide(start, '"', &out);
+	if (len == -1) return NULL;
+	end = out;
+	lexer->token.kind = TOKEN_STRING_LITERAL;
+	lexer->token.detail = TOKEN_DETAIL_WIDE_STRING_LITERAL;
+
+	uint32_t *string = malloc((len + 1) * sizeof (*string));
+	if (!string) {
+		fprintf(stderr, "could not interpret string of length %td.\n", (len + 1) * sizeof (*string));
+		return NULL;
+	}
+	encode_wide(string, '"', start);
+	string[len] = '\0';
+	lexer->token.wstring.start = string;
+	lexer->token.wstring.len = len;
+	return end;
+}
+
+int print_token(const struct Token *token) {
 	int prn = 0;
 	if (token->detail < TOKEN_DETAIL_NONE || token->detail >= TOKEN_DETAIL_NUM) __builtin_unreachable();
 	switch (token->kind) {
