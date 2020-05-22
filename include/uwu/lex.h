@@ -12,6 +12,7 @@ struct Token {
 	enum TokenKind kind;
 	enum TokenDetail detail;
 	const char *start;
+	enum ConstantAffix affix;
 	int len;
 	__extension__ union {
 		uint32_t character;
@@ -19,10 +20,7 @@ struct Token {
 			char *start;
 			int len;
 		} string;
-		struct {
-			uintmax_t value;
-			enum IntegerSuffix suffix;
-		} integer;
+		uintmax_t integer;
 		long double floating;
 	};
 };
