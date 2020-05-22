@@ -10,11 +10,15 @@ int lex_test(void) {
 		fprintf(stderr, "could not initialize lexer with file `%s`.\n", f);
 		goto end;
 	}
-	while (lexer_next(&lexer) != LEXER_END) {
-		(void) 0;
+	enum LexerStatus s;
+	while (s = lexer_next(&lexer), s != LEXER_END && s != LEXER_DECODE_ERROR) {
+		printf("at token: ");
+		print_token(&lexer.token);
+		printf("\n");
 	}
 	lexer_dump(&lexer);
 	lexer_fini(&lexer);
+	if (s == LEXER_DECODE_ERROR) return s;
 end:
 	return err;
 }

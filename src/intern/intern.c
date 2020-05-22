@@ -21,7 +21,7 @@ void intern_fini(struct Interns *interns) {
 	free(interns->interns);
 }
 
-const struct InternString *intern_string(struct Interns *interns, const char *str, long len) {
+const struct InternString *intern_string(struct Interns *interns, const uint8_t *str, long len) {
 	const struct InternString *in = intern_find(interns, str, len);
 	if (in) return in;
 	if (interns->len+1 > interns->cap) {
@@ -39,17 +39,17 @@ const struct InternString *intern_string(struct Interns *interns, const char *st
 	return intern;
 }
 
-const struct InternString *intern_find(const struct Interns *interns, const char *str, long len) {
+const struct InternString *intern_find(const struct Interns *interns, const uint8_t *str, long len) {
 	for (long i=0; i<interns->len; i++) {
 		const struct InternString *intern = interns->interns+i;
-		if (len == intern->len && strncmp(str, intern->str, len) == 0) {
+		if (len == intern->len && memcmp(str, intern->str, len) == 0) {
 			return intern;
 		}
 	}
 	return NULL;
 }
 
-bool intern_contains(const struct Interns *interns, const char *str, long len) {
+bool intern_contains(const struct Interns *interns, const uint8_t *str, long len) {
 	return intern_find(interns, str, len);
 }
 
@@ -76,7 +76,7 @@ const struct Interns *get_keyword_interns(void) {
 	static const struct InternString kws[TOKEN_DETAIL_KEYWORDS_END-TOKEN_DETAIL_KEYWORDS_START] = {
 #define ELEM(a, b) \
 	[TOKEN_DETAIL_KEYWORD_ ## a - TOKEN_DETAIL_KEYWORDS_START] = { \
-		.str = # b, \
+		.str = (uint8_t *) # b, \
 		.len = sizeof (# b)-1, \
 	}
 // sizeof (# b)-1 is like strlen but we need a constant expression

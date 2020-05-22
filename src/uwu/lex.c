@@ -7,13 +7,15 @@
 #include <stddef.h>
 #include <assert.h>
 #include <math.h>
+#include <inttypes.h>
 
 #include "uwu/lex.h"
 #include "stream/stream.h"
 #include <intern/intern.h>
 #include "data.h"
+#include <stream/utf-8.h>
 
-static int keyword_id(const char *str, long len);
+static int keyword_id(const uint8_t *str, long len);
 
 static inline bool is_token(struct Lexer *lexer, enum TokenDetail detail) {
 	return lexer->token.detail == detail;
@@ -36,32 +38,32 @@ static inline void expect_token(struct Lexer *lexer, enum TokenDetail detail) {
 	}
 }
 
-int char2hex(char c) {
-	char l = tolower(c);
+int cp2hex(uint32_t c) {
+	uint32_t l = tolower(c);
 	if (l > '9') return l - 'a' + 0xa;
 	return l - '0';
 }
 
 static bool is_valid_universal(uint32_t c);
-static uint8_t xtoint(char x);
-static uint32_t xstoint(char *x, int n, char **endptr);
-static uint32_t read_escape_sequence(char *start, char **endptr);
+static uint8_t xtoint(uint32_t x);
+static uint32_t xstoint(const uint8_t *x, int n, uint8_t **endptr);
+static uint32_t read_escape_sequence(const uint8_t *start, uint8_t **endptr);
 
-static char *lex_word(struct Lexer *lexer);
-static char *lex_number(struct Lexer *lexer);
-static char *lex_character(struct Lexer *lexer);
-static char *lex_string(struct Lexer *lexer);
-static char *lex_integer(struct Lexer *lexer, int base);
-static char *lex_floating(struct Lexer *lexer, int base);
-static char *lex_wide_character(struct Lexer *lexer);
-static char *lex_wide_string(struct Lexer *lexer);
+static const uint8_t *lex_word(struct Lexer *lexer);
+static const uint8_t *lex_number(struct Lexer *lexer);
+static const uint8_t *lex_character(struct Lexer *lexer);
+static const uint8_t *lex_string(struct Lexer *lexer);
+static const uint8_t *lex_integer(struct Lexer *lexer, int base);
+static const uint8_t *lex_floating(struct Lexer *lexer, int base);
+static const uint8_t *lex_wide_character(struct Lexer *lexer);
+static const uint8_t *lex_wide_string(struct Lexer *lexer);
 
-static int print_token(const struct Token *token);
+uint32_t next_codepoint(const uint8_t *stream, uint8_t **endptr);
 
 int lexer_init(struct Lexer *lexer, const char *name) {
 	int ret = -1;
 	if (!lexer) goto early;
-	Stream stream = stream_init(name, C_STREAM_READ|C_STREAM_TEXT);
+	Stream stream = stream_init(name, C_STREAM_READ|C_STREAM_TEXT|C_STREAM_UTF_8);
 	if (!stream) goto early;
 	long size = stream_size(stream);
 	lexer->buf = malloc(size+1);
@@ -71,12 +73,14 @@ int lexer_init(struct Lexer *lexer, const char *name) {
 	lexer->token.kind = TOKEN_NONE;
 	if ((ret = intern_init(&lexer->identifiers))) goto end;
 	lexer->len = size;
+	ret = -1;
 
 	if (stream_read(stream, lexer->buf, size) != size) goto end;
 	lexer->buf[size] = '\0';
 	ret = 0;
 end:
 	stream_fini(stream);
+	if (ret != 0) free(lexer->buf);
 early:
 	return ret;
 }
@@ -92,16 +96,16 @@ enum LexerStatus lexer_next(struct Lexer *lexer) {
 	if (!lexer->cur) goto empty;
 	if (lexer->token.detail == TOKEN_DETAIL_STRING_LITERAL) {
 		free(lexer->token.string.start);
+	} else if (lexer->token.detail == TOKEN_DETAIL_WIDE_STRING_LITERAL) {
+		free(lexer->token.wstring.start);
 	}
-	char *end;
+	const uint8_t *end;
 again:
-	if ((uint8_t) *lexer->cur >= 0x80) {
-		char *s = lexer->cur;
-		while ((uint8_t) *lexer->cur >= 0x80) lexer->cur++;
-		printf("non ASCII character in input: '%.*s', skipping.\n", (int)(lexer->cur - s), s);
-	}
 	lexer->token.start = lexer->cur;
-	switch (*lexer->cur) {
+	uint8_t *out;
+	uint32_t cp = codepoint_utf_8(lexer->cur, &out);
+	end = out;
+	switch (cp) {
 	case ' ':
 	case '\t':
 	case '\v':
@@ -253,22 +257,18 @@ again:
 #undef CASE2
 #undef CASE1
 	default:
-		printf("unexpected character '%c' (ASCII %d) in program.\n", *lexer->cur, *lexer->cur);
+		printf("unexpected character %lc (U+%04" PRIX32 ").\n", cp, cp);
 		end = NULL;
 		break;
 	}
-	if (end) {
-		lexer->token.len = end - lexer->token.start;
-		lexer->cur = end;
-	} else {
+	if (!end) {
 		lexer->token.kind = TOKEN_NONE;
 		lexer->token.detail = TOKEN_DETAIL_NONE;
-		lexer->token.len = 1;
-		lexer->cur++;
+		codepoint_utf_8(lexer->cur, &out);
+		end = out;
 	}
-	printf("at token: ");
-	print_token(&lexer->token);
-	printf("\n");
+	lexer->token.len = end - lexer->token.start;
+	lexer->cur = end;
 	return LEXER_VALID;
 }
 
@@ -281,7 +281,7 @@ void lexer_dump(const struct Lexer *lexer) {
 	print_interns(&lexer->identifiers);
 }
 
-static int keyword_id(const char *str, long len) {
+static int keyword_id(const uint8_t *str, long len) {
 	const struct Interns *kws = get_keyword_interns();
 	const struct InternString *in = intern_find(kws, str, len);
 	if (in) {
@@ -290,35 +290,36 @@ static int keyword_id(const char *str, long len) {
 	return TOKEN_DETAIL_NONE;
 }
 
-__attribute__((unused))
 bool is_valid_universal(uint32_t c) {
-	return (c >= 0x00A0 || c == 0x0024 || c == 0x0040 || c == 0x0060) && !(c >= 0xD800 && c <= 0xDFFF);
+	return (c >= 0x00A0 || c == 0x0024 || c == 0x0040 || c == 0x0060)
+		&& !((c >= 0xD800 && c <= 0xDFFF) || c >= 0x10FFFF);
 }
 
-uint8_t xtoint(char x) {
+uint8_t xtoint(uint32_t x) {
 	if (!isxdigit(x)) __builtin_unreachable();
 	if (isdigit(x)) return x - '0';
 	if (islower(x)) return x - 'a' + 0xa;
 	return x - 'A' + 0xA;
 }
 
-uint32_t xstoint(char *x, int n, char **endptr) {
+uint32_t xstoint(const uint8_t *x, int n, uint8_t **endptr) {
 	uint32_t value = 0;
-	char *cur = x;
+	const uint8_t *cur = x;
 	for (int i = 0; i < n; i++, cur++) {
 		if (!isxdigit(*cur)) goto err;
 		value = value * 16 | xtoint(*cur);
 	}
-	if (endptr) *endptr = cur;
+	if (endptr) *endptr = (uint8_t *) cur;
 	return value;
 err:
-	if (endptr) *endptr = x;
+	if (endptr) *endptr = (uint8_t *) x;
 	return 0;
 }
 
-uint32_t read_escape_sequence(char *start, char **endptr) {
+uint32_t read_escape_sequence(const uint8_t *start, uint8_t **endptr) {
 	uint32_t value = 0;
-	char *end = start;
+	const uint8_t *end = start;
+	uint8_t *out;
 	switch (*end) {
 	case '\'':
 	case '"':
@@ -361,34 +362,43 @@ uint32_t read_escape_sequence(char *start, char **endptr) {
 	case 'x':
 		// having 1 character is okay here
 		for (int i = 0; i < 2 && isxdigit(*end); i++, end++)
-			value = value * 16 | char2hex(*end);
+			value = value * 16 | cp2hex(*end);
 		break;
 	case 'u':
 		// skip the u/U
-		value = xstoint(start+1, 4, &end);
-		if (end == start+1) {
+		value = xstoint(start+1, 4, &out);
+		if (out == start+1) {
 			printf("universal character escape sequence needs 4 nibbles.\n");
 		}
+		if (!is_valid_universal(value)) {
+			printf("code point %lc (U+%" PRIX32 ") is invalid.\n", value, value);
+		}
+		end = out;
 		break;
 	case 'U':
-		value = xstoint(start+1, 8, &end);
-		if (end == start+1) {
+		value = xstoint(start+1, 8, &out);
+		if (out == start+1) {
 			printf("universal character escape sequence needs 8 nibbles.\n");
 		}
+		if (!is_valid_universal(value)) {
+			printf("code point %lc (U+%" PRIX32 ") is invalid.\n", value, value);
+		}
+		end = out;
 		break;
 	default:
 		printf("unknown escape sequence `\\%c`.\n", *end);
 		break;
 	}
-	if (endptr) *endptr = end;
+	if (endptr) *endptr = (uint8_t *) end;
 	return value;
 }
 
-static char *lex_word(struct Lexer *lexer) {
-	char *start = lexer->cur, *end = start;
+const uint8_t *lex_word(struct Lexer *lexer) {
+	const uint8_t *start = lexer->cur, *end = start;
 	while (isalnum(*end) || *end == '_') end++;
 	if (*end == '\0') {
 		printf("end of file in identifier name.\n");
+		return NULL;
 	}
 	long len = end - start;
 	int id;
@@ -408,9 +418,9 @@ static char *lex_word(struct Lexer *lexer) {
 	return end;
 }
 
-char *lex_number(struct Lexer *lexer) {
+const uint8_t *lex_number(struct Lexer *lexer) {
 	int base = 10;
-	char *cur = lexer->cur;
+	const uint8_t *cur = lexer->cur;
 	if (*cur++ == '0') {
 		if (tolower(*cur) == 'x') {
 			base = 16;
@@ -429,105 +439,140 @@ char *lex_number(struct Lexer *lexer) {
 	return lex_integer(lexer, base);
 }
 
-char *lex_character(struct Lexer *lexer) {
-	char *start = lexer->cur, *end = start + 1;
+uint32_t read_character(const uint8_t *ch, bool is_wide, uint8_t **endptr) {
+	const uint8_t *start = ch, *end = start;
+	assert(*end == '\'');
+	end++;
 	uint32_t value = 0;
-	if (*start != '\'') __builtin_unreachable();
+	int cnt = 0;
 	while (*end && *end != '\n' && *end != '\'') {
-		value <<= 8;
-		value |= *end;
+		value = value * 256 | *end;
+		cnt++;
 		if (*end++ != '\\') continue;
-		char *out = end;
-		value = read_escape_sequence(end, &out);
-		if (out == end) return NULL;
+		uint8_t *out;
+		uint32_t cp = read_escape_sequence(end, &out);
+		if (out == end) goto err;
+		end = out;
+		if (!is_wide && cp >= 0x7F) {
+			printf("universal character in character literal.\n");
+		}
+		value = cp;
+	}
+	if (cnt > 1) {
+		printf("multiple characters inside of one character literal.\n");
 	}
 	if (*end == '\0') {
 		printf("unexpected end of file in character literal.\n");
-		return NULL;
+		goto err;
 	} else if (*end == '\n') {
 		printf("unexpected newline in character literal.\n");
-		return NULL;
+		goto err;
 	}
+	assert(*end == '\'');
+	end++;
+	if (endptr) *endptr = (uint8_t *) end;
+	return value;
+err:
+	if (endptr) *endptr = (uint8_t *) ch;
+	return 0;
+}
+
+const uint8_t *lex_character(struct Lexer *lexer) {
+	const uint8_t *start = lexer->cur;
+	uint8_t *out;
+	uint32_t value = read_character(start, false, &out);
+	if (out == start) return NULL;
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_CHARACTER_CONSTANT;
 	lexer->token.character = value;
-	return end;
+	return out;
 }
 
-ptrdiff_t string_lit_len_narrow(char *str, char **endptr) {
-	assert(*str == '"');
-	char *start = str + 1, *end = start;
+ptrdiff_t string_lit_len_narrow(const uint8_t *str, uint32_t boundary, uint8_t **endptr) {
+	assert(*str == boundary);
+	const uint8_t *start = str + 1, *end = start;
 	ptrdiff_t len = 0;
-	while (*end && *end != '\n' && *end != '"') {
+	while (*end && *end != '\n' && *end != boundary) {
 		len++;
 		if (*end++ != '\\') continue;
-		read_escape_sequence(end, &end);
+		uint8_t *out;
+		uint32_t cp = read_escape_sequence(end, &out);
+		end = out;
+		len += len_character_utf_8(cp) - 1; // already incremented
 	}
-	if (*end == '\0' || *end == '\n') {
-		len = -1;
-	}
-	assert(*end == '"');
-	if (endptr) *endptr = end + 1;
+	if (*end == '\0' || *end == '\n') len = -1;
+	assert(*end == boundary);
+	end++;
+	if (endptr) *endptr = (uint8_t *) end;
 	return len;
 }
 
-void encode_narrow(char *out, char *in) {
-	for (char *c = out, *r = in + 1; *r != '"'; c++) {
-		*c = *r;
-		if (*r == '\0' || *r == '\n') __builtin_unreachable();
-		if (*r++ != '\\') continue;
-		uint32_t value = read_escape_sequence(r, &r);
-		*c = value & 0xFF; // we do not handle universal characters correctly yet
+void encode_narrow(uint8_t *out, uint32_t boundary, const uint8_t *in) {
+	assert(*in == boundary);
+	in++;
+	for (uint8_t *c = out; *in != boundary;) {
+		*c = *in;
+		if (*in == '\0' || *in == '\n') __builtin_unreachable();
+		if (*in++ != '\\') {
+			c++;
+			continue;
+		}
+		uint8_t *end;
+		uint32_t cp = read_escape_sequence(in, &end);
+		in = end;
+		encode_utf_8(c, cp, &c);
 	}
 }
 
-char *lex_string(struct Lexer *lexer) {
-	char *start = lexer->cur, *end;
-	ptrdiff_t len = string_lit_len_narrow(start, &end);
+const uint8_t *lex_string(struct Lexer *lexer) {
+	const uint8_t *start = lexer->cur, *end;
+	uint8_t *out;
+	ptrdiff_t len = string_lit_len_narrow(start, '"', &out);
+	if (len == -1) return NULL;
+	end = out;
 	lexer->token.kind = TOKEN_STRING_LITERAL;
 	lexer->token.detail = TOKEN_DETAIL_STRING_LITERAL;
-	if (len == -1) return NULL;
 
-	char *string = malloc(len+1);
+	uint8_t *string = malloc(len + 1);
 	if (!string) {
-		fprintf(stderr, "could not interpret string of length %ld.\n", len+1);
+		fprintf(stderr, "could not interpret string of length %td.\n", len + 1);
 		return NULL;
 	}
-	encode_narrow(string, start);
+	encode_narrow(string, '"', start);
 	string[len] = '\0';
 	lexer->token.string.start = string;
 	lexer->token.string.len = len;
 	return end;
 }
 
-uintmax_t read_integer(char *i, int base, char **endptr) {
+uintmax_t read_integer(const uint8_t *i, int base, uint8_t **endptr) {
 	uintmax_t val = 0;
-	char *c = i;
+	const uint8_t *c = i;
 	for (; isxdigit(*c); c++) {
-		int d = char2hex(*c);
+		int d = cp2hex(*c);
 		if (d >= base) goto end;
 		uintmax_t next = (val * base) + d;
 		if (next < val) goto end;
 		val = next;
 	}
-	if (endptr) *endptr = c;
+	if (endptr) *endptr = (uint8_t *) c;
 	return val;
 end:
-	if (endptr) *endptr = i;
+	if (endptr) *endptr = (uint8_t *) i;
 	return 0;
 }
 
-char *lex_integer(struct Lexer *lexer, int base) {
-	char *start = lexer->cur, *end = start;
+const uint8_t *lex_integer(struct Lexer *lexer, int base) {
+	const uint8_t *start = lexer->cur, *end = start;
 	if (base == 16) {
 		end += 2;
 	}
-	char *out;
+	uint8_t *out;
 	uintmax_t val = read_integer(end, base, &out);
 	if (out == end) return NULL;
 	end = out;
 	int usuffix = 0, lsuffix = 0, llsuffix = 0;
-	for (char suff, it = 0; suff = tolower(*end), suff == 'u' || suff == 'l'; end++, it++) {
+	for (uint32_t suff, it = 0; suff = tolower(*end), suff == 'u' || suff == 'l'; end++, it++) {
 		if (it > 4) return NULL; // no suffix is that long, but just incase of a degenerate case
 		if (suff == 'u') {
 			usuffix++;
@@ -559,8 +604,8 @@ char *lex_integer(struct Lexer *lexer, int base) {
 	return end;
 }
 
-long double read_floating_exponent(char *f, long double expbase, char **endptr) {
-	char *cur = f + 1; // skip e/E/p/P
+long double read_floating_exponent(const uint8_t *f, long double expbase, uint8_t **endptr) {
+	const uint8_t *cur = f + 1; // skip e/E/p/P
 	long double sign = +1.0l;
 	if (*cur == '+') {
 		cur++;
@@ -572,7 +617,7 @@ long double read_floating_exponent(char *f, long double expbase, char **endptr) 
 	// cannot use read_integer because 10f is a valid decimal exponent but not integer
 	uintmax_t e = 0;
 	while (isdigit(*cur)) {
-		int i = char2hex(*cur);
+		int i = cp2hex(*cur);
 		if (i >= 10) goto err;
 		uintmax_t next = e * 10 + i;
 		if (next < e) {
@@ -581,62 +626,62 @@ long double read_floating_exponent(char *f, long double expbase, char **endptr) 
 		e = next;
 		cur++;
 	}
-	if (endptr) *endptr = cur;
+	if (endptr) *endptr = (uint8_t *) cur;
 	return powl(expbase, e * sign);
 err:
-	if (endptr) *endptr = f;
+	if (endptr) *endptr = (uint8_t *) f;
 	return 0.0l;
 }
 
-long double read_floating_decimal(char *f, char **endptr) {
+long double read_floating_decimal(const uint8_t *f, uint8_t **endptr) {
 	long double d = 0.0l, base = 10.0l;
-	char *cur = f;
+	const uint8_t *cur = f;
 	for (; isdigit(*cur); cur++)
-		d = d * base + char2hex(*cur); // no need to worry about overflow in floating point
+		d = d * base + cp2hex(*cur); // no need to worry about overflow in floating point
 	if (*cur == '.') {
 		cur++;
 		for (long double div = base; isdigit(*cur); div *= base, cur++)
-			d += char2hex(*cur) / div;
+			d += cp2hex(*cur) / div;
 	}
 	if (tolower(*cur) == 'e') {
-		char *out = cur;
+		uint8_t *out;
 		d *= read_floating_exponent(cur, 10.0l, &out);
 		if (out == cur) goto err;
 		cur = out;
 	}
-	if (endptr) *endptr = cur;
+	if (endptr) *endptr = (uint8_t *) cur;
 	return d;
 err:
-	if (endptr) *endptr = f;
+	if (endptr) *endptr = (uint8_t *) f;
 	return 0.0l;
 }
 
-long double read_floating_hexadecimal(char *f, char **endptr) {
+long double read_floating_hexadecimal(const uint8_t *f, uint8_t **endptr) {
 	long double d = 0.0l, base = 16.0l;
-	char *cur = f;
+	const uint8_t *cur = f;
 	for (; isxdigit(*cur); cur++)
-		d = d * base + char2hex(*cur);
+		d = d * base + cp2hex(*cur);
 	if (*cur == '.') {
 		cur++;
 		for (long double div = base; isxdigit(*cur); div *= base, cur++)
-			d += char2hex(*cur) / div;
+			d += cp2hex(*cur) / div;
 	}
 	if (tolower(*cur) == 'p') {
-		char *out = cur;
+		uint8_t *out;
 		d *= read_floating_exponent(cur, 2.0l, &out);
 		if (out == cur) goto err;
 		cur = out;
 	}
-	if (endptr) *endptr = cur;
+	if (endptr) *endptr = (uint8_t *) cur;
 	return d;
 err:
-	if (endptr) *endptr = f;
+	if (endptr) *endptr = (uint8_t *) f;
 	return 0.0l;
 }
 
-char *lex_floating(struct Lexer *lexer, int base) {
-	char *start = lexer->cur, *end = start;
-	char *out = end;
+const uint8_t *lex_floating(struct Lexer *lexer, int base) {
+	const uint8_t *start = lexer->cur, *end = start;
+	uint8_t *out;
 	long double val;
 	if (base == 10) {
 		val = read_floating_decimal(end, &out);
@@ -648,7 +693,7 @@ char *lex_floating(struct Lexer *lexer, int base) {
 	end = out;
 
 	int lsuffix = 0, fsuffix = 0;
-	for (char suff, it = 0; suff = tolower(*end), suff == 'l' || suff == 'f'; end++, it++) {
+	for (uint32_t suff, it = 0; suff = tolower(*end), suff == 'l' || suff == 'f'; end++, it++) {
 		if (it > 4) return NULL;
 		if (suff == 'l') lsuffix++;
 		else             fsuffix++;
@@ -710,18 +755,34 @@ static int print_token(const struct Token *token) {
 		case TOKEN_DETAIL_CHARACTER_CONSTANT:
 			prn += printf("%s'%c'", token_detail_to_str[token->detail], token->character);
 			break;
+		case TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT:
+			prn += printf("%s'%lc'", token_detail_to_str[token->detail], token->character);
+			break;
 		case TOKEN_DETAIL_NONE ... TOKEN_DETAIL_INTEGER_CONSTANT - 1:
-		case TOKEN_DETAIL_CHARACTER_CONSTANT + 1 ... TOKEN_DETAIL_NUM:
+		case TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT + 1 ... TOKEN_DETAIL_NUM:
 		default:
 			__builtin_unreachable();
 		}
 		break;
 	case TOKEN_STRING_LITERAL:
-		prn += printf("%s\"%.*s\"", token_detail_to_str[token->detail], token->string.len, token->string.start);
+		if (token->detail == TOKEN_DETAIL_STRING_LITERAL) {
+			prn += printf("%s\"%.*s\"",
+					token_detail_to_str[token->detail],
+					token->string.len,
+					token->string.start
+			);
+		} else if (token->detail == TOKEN_DETAIL_WIDE_STRING_LITERAL) {
+			prn += printf("%s\"%.*ls\"",
+					token_detail_to_str[token->detail],
+					token->wstring.len,
+					token->wstring.start
+			);
+		} else __builtin_unreachable();
 		break;
 	case TOKEN_PUNCTUATOR:
 		prn += printf("%s", token_detail_to_str[token->detail]);
 		break;
+	case TOKEN_NUM:
 	default:
 		__builtin_unreachable();
 	}

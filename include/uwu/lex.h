@@ -11,13 +11,13 @@
 struct Token {
 	enum TokenKind kind;
 	enum TokenDetail detail;
-	const char *start;
+	const uint8_t *start;
 	enum ConstantAffix affix;
 	int len;
 	__extension__ union {
 		uint32_t character;
 		struct {
-			char *start;
+			uint8_t *start;
 			int len;
 		} string;
 		uintmax_t integer;
@@ -26,7 +26,8 @@ struct Token {
 };
 
 struct Lexer {
-	char *buf, *cur;
+	uint8_t *buf;
+	const uint8_t *cur;
 	long len, line;
 	struct Token token;
 	struct Interns identifiers;
@@ -36,6 +37,8 @@ int lexer_init(struct Lexer *lexer, const char *name);
 void lexer_fini(struct Lexer *lexer);
 enum LexerStatus lexer_next(struct Lexer *lexer);
 void lexer_dump(const struct Lexer *lexer);
+
+int print_token(const struct Token *token);
 
 #endif /* C_UWU_LEX_H */
 

@@ -1,10 +1,17 @@
 #include "stream/stream.h"
+#include "stream/utf-8.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #define MAX_STREAM_NAME (128)
+
+enum StreamEncoding {
+	ENC_UTF_8,
+	ENC_DEFAULT = ENC_UTF_8,
+};
 
 struct Stream {
 	char *name;
@@ -12,15 +19,19 @@ struct Stream {
 	long len;
 	long size;
 	FILE *f;
+	enum StreamEncoding enc;
 };
 
 Stream stream_init(const char *title, int mode) {
 	char mode_str[3] = { [2] = '\0' };
+	enum StreamEncoding enc = ENC_DEFAULT;
 
 	if      (mode & C_STREAM_READ  ) mode_str[0] = 'r';
 	else if (mode & C_STREAM_WRITE ) mode_str[0] = 'w';
 	if      (mode & C_STREAM_TEXT  ) mode_str[1] = '\0';
 	else if (mode & C_STREAM_BINARY) mode_str[1] = 'b';
+
+	if (mode & C_STREAM_UTF_8) enc = ENC_UTF_8;
 
 	struct Stream *stream = malloc(sizeof (*stream));
 	if (!stream) goto alloc_fail;
@@ -36,6 +47,7 @@ Stream stream_init(const char *title, int mode) {
 
 	stream->size = 0;
 	stream->size = stream_size(stream);
+	stream->enc = enc;
 
 	char *dot = strrchr(stream->name, '.');
 	stream->ext = dot && dot != stream->name ? dot: stream->name+l;
@@ -81,11 +93,14 @@ long stream_size(Stream stream) {
 	return stream->size;
 }
 
-long stream_read(Stream stream, char *buf, long size) {
-	return fread(buf, 1, size, stream->f);
+long stream_read(Stream stream, void *buf, long size) {
+	long r = fread(buf, 1, size, stream->f);
+	if (r != size && ferror(stream->f)) return r;
+	if (is_valid_buffer_utf_8(buf, size)) return r;
+	return -1;
 }
 
-long stream_write(Stream stream, const char *buf, long size) {
+long stream_write(Stream stream, const void *buf, long size) {
 	return fwrite(buf, 1, size, stream->f);
 }
 

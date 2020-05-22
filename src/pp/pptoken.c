@@ -20,6 +20,7 @@ int preprocessor_init(struct Preprocessor *pp, const char *name) {
 	// pp->pptoken.kind = PREPROCESSING_TOKEN_NONE;
 io:
 	stream_fini(stream);
+	if (ret != 0) free(pp->buf);
 early:
 	return ret;
 }
