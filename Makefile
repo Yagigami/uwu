@@ -41,8 +41,10 @@ $(OUTPUT)/$(BIN): $(OUTDIRS) $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
 -include $(DEPS)
-$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c
-	$(CC) $(CFLAGS) -MMD -c -o $@ $<
+$(OBJECTS): $(OUTPUT)/%.o: $(SRC)/%.c $(OUTPUT)/%.d
+
+$(OUTPUT)/%.d: $(SRC)/%.c
+	$(CC) $(CFLAGS) -MMD -c -o $(patsubst $(SRC)/%.c,$(OUTPUT)/%.o,$<) $<
 
 $(OUTDIRS):
 	-mkdir $@

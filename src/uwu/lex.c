@@ -12,7 +12,7 @@
 #include "uwu/lex.h"
 #include "stream/stream.h"
 #include <intern/intern.h>
-#include "data.h"
+#include "common/data.h"
 #include <stream/utf-8.h>
 
 static int keyword_id(const uint8_t *str, long len);
@@ -732,8 +732,13 @@ ptrdiff_t string_lit_len_wide(const uint8_t *str, uint32_t boundary, uint8_t **e
 	ptrdiff_t len = 0;
 	while (*end && *end != '\n' && *end != boundary) {
 		len++;
-		if (*end++ != '\\') continue;
 		uint8_t *out;
+		if (*end > 0x7F) {
+			codepoint_utf_8(end, &out);
+			end = out;
+			continue;
+		}
+		if (*end++ != '\\') continue;
 		read_escape_sequence(end, &out);
 		end = out;
 	}
@@ -747,12 +752,18 @@ ptrdiff_t string_lit_len_wide(const uint8_t *str, uint32_t boundary, uint8_t **e
 void encode_wide(uint32_t *out, uint32_t boundary, const uint8_t *in) {
 	assert(*in == boundary);
 	in++;
-	for (uint32_t *c = out; *in != boundary; c++) {
+	for (uint32_t *c = out, cp; *in != boundary; c++) {
 		*c = *in;
+		uint8_t *end;
+		if (*in > 0x7F) {
+			cp = codepoint_utf_8(in, &end);
+			in = end;
+			*c = cp;
+			continue;
+		}
 		if (*in == '\0' || *in == '\n') __builtin_unreachable();
 		if (*in++ != '\\') continue;
-		uint8_t *end;
-		uint32_t cp = read_escape_sequence(in, &end);
+		cp = read_escape_sequence(in, &end);
 		in = end;
 		*c = cp;
 	}

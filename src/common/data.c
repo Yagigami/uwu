@@ -1,4 +1,4 @@
-#include "data.h"
+#include "common/data.h"
 #include <uwu/enums.h>
 
 const char *token_detail_to_str[] = {
