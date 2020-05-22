@@ -128,4 +128,10 @@ enum ConstantAffix {
 	CONSTANT_AFFIX_NUM,
 };
 
+enum LexerStatus {
+	LEXER_VALID,
+	LEXER_INVALID,
+	LEXER_END,
+};
+
 #endif /* C_UWU_ENUMS_H */

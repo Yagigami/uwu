@@ -47,14 +47,14 @@ static uint8_t xtoint(char x);
 static uint32_t xstoint(char *x, int n, char **endptr);
 static uint32_t read_escape_sequence(char *start, char **endptr);
 
-static void lex_word(struct Lexer *lexer);
-static void lex_number(struct Lexer *lexer);
-static void lex_character(struct Lexer *lexer);
-static void lex_string(struct Lexer *lexer);
-static void lex_integer(struct Lexer *lexer, int base);
-static void lex_floating(struct Lexer *lexer, int base);
-static void lex_wide_character(struct Lexer *lexer);
-static void lex_wide_string(struct Lexer *lexer);
+static char *lex_word(struct Lexer *lexer);
+static char *lex_number(struct Lexer *lexer);
+static char *lex_character(struct Lexer *lexer);
+static char *lex_string(struct Lexer *lexer);
+static char *lex_integer(struct Lexer *lexer, int base);
+static char *lex_floating(struct Lexer *lexer, int base);
+static char *lex_wide_character(struct Lexer *lexer);
+static char *lex_wide_string(struct Lexer *lexer);
 
 static int print_token(const struct Token *token);
 
@@ -88,17 +88,19 @@ void lexer_fini(struct Lexer *lexer) {
 	memset(lexer, 0, sizeof *lexer);
 }
 
-void lexer_next(struct Lexer *lexer) {
+enum LexerStatus lexer_next(struct Lexer *lexer) {
 	if (!lexer->cur) goto empty;
 	if (lexer->token.detail == TOKEN_DETAIL_STRING_LITERAL) {
 		free(lexer->token.string.start);
 	}
+	char *end;
 again:
 	if ((uint8_t) *lexer->cur >= 0x80) {
 		char *s = lexer->cur;
 		while ((uint8_t) *lexer->cur >= 0x80) lexer->cur++;
 		printf("non ASCII character in input: '%.*s', skipping.\n", (int)(lexer->cur - s), s);
 	}
+	lexer->token.start = lexer->cur;
 	switch (*lexer->cur) {
 	case ' ':
 	case '\t':
@@ -112,42 +114,37 @@ again:
 		goto again;
 	empty:
 	case '\0':
-		lexer->token.kind = TOKEN_NONE;
-		lexer->token.start = lexer->cur;
-		lexer->token.len = 1;
-		break;
+		return LEXER_END;
 	case 'L':
-		if (lexer->cur[1] == '\'') lex_wide_character(lexer);
-		else if (lexer->cur[1] == '"') lex_wide_string(lexer);
-		else lex_word(lexer);
+		if (lexer->cur[1] == '\'') end = lex_wide_character(lexer);
+		else if (lexer->cur[1] == '"') end = lex_wide_string(lexer);
+		else end = lex_word(lexer);
 		break;
 	case 'a' ... 'z':
 	case 'A' ... 'L'-1: // L is special
 	case 'L'+1 ... 'Z':
 	case '_':
-		lex_word(lexer);
+		end = lex_word(lexer);
 		break;
 	case '0' ... '9':
-		lex_number(lexer);
+		end = lex_number(lexer);
 		break;
 	case '\'':
-		lex_character(lexer);
+		end = lex_character(lexer);
 		break;
 	case '"':
-		lex_string(lexer);
+		end = lex_string(lexer);
 		break;
 	case '.': // can also be the start of a decimal floating constant
 		if (isdigit(lexer->cur[1])) {
-			lex_floating(lexer, 10);
+			end = lex_floating(lexer, 10);
 		} else {
-			lexer->token.start = lexer->cur++;
+			end = lexer->cur;
 			lexer->token.kind = TOKEN_PUNCTUATOR;
-			if (*lexer->cur == '.' && lexer->cur[1] == '.') {
-				lexer->token.len = 3;
+			if (*end == '.' && lexer->cur[1] == '.') {
 				lexer->token.detail = TOKEN_DETAIL_ELLIPSIS;
-				lexer->cur += 2;
+				end += 2;
 			} else {
-				lexer->token.len = 1;
 				lexer->token.detail = TOKEN_DETAIL_DOT;
 			}
 		}
@@ -157,8 +154,7 @@ again:
 #define CASE1(k1, v1) \
 	case k1: \
 		lexer->token.kind = TOKEN_PUNCTUATOR; \
-		lexer->token.start = lexer->cur++; \
-		lexer->token.len = 1; \
+		end = lexer->cur + 1; \
 		lexer->token.detail = TOKEN_DETAIL_ ## v1; \
 		break
 
@@ -166,13 +162,11 @@ again:
 #define CASE2(k1, v1, k2, v2) \
 	case k1: \
 		lexer->token.kind = TOKEN_PUNCTUATOR; \
-		lexer->token.start = lexer->cur++; \
-		if (*lexer->cur == k2) { \
-			lexer->token.len = 2; \
+		end = lexer->cur + 1; \
+		if (*end == k2) { \
 			lexer->token.detail = TOKEN_DETAIL_ ## v2; \
-			lexer->cur++; \
+			end++; \
 		} else { \
-			lexer->token.len = 1; \
 			lexer->token.detail = TOKEN_DETAIL_ ## v1; \
 		} \
 		break
@@ -181,17 +175,14 @@ again:
 #define CASE3(k1, v1, k2, v2, k3, v3) \
 	case k1: \
 		lexer->token.kind = TOKEN_PUNCTUATOR; \
-		lexer->token.start = lexer->cur++; \
-		if (*lexer->cur == k2) { \
-			lexer->token.len = 2; \
+		end = lexer->cur + 1; \
+		if (*end == k2) { \
 			lexer->token.detail = TOKEN_DETAIL_ ## v2; \
-			lexer->cur++; \
-		} else if (*lexer->cur == k3) { \
-			lexer->token.len = 2; \
+			end++; \
+		} else if (*end == k3) { \
 			lexer->token.detail = TOKEN_DETAIL_ ## v3; \
-			lexer->cur++; \
+			end++; \
 		} else { \
-			lexer->token.len = 1; \
 			lexer->token.detail = TOKEN_DETAIL_ ## v1; \
 		} \
 		break
@@ -219,51 +210,41 @@ again:
 
 	case '-':
 		lexer->token.kind = TOKEN_PUNCTUATOR;
-		lexer->token.start = lexer->cur++;
-		if (*lexer->cur == '-') {
-			lexer->token.len = 2;
+		end = lexer->cur + 1;
+		if (*end == '-') {
 			lexer->token.detail = TOKEN_DETAIL_DECREMENT;
-			lexer->cur++;
-		} else if (*lexer->cur == '>') {
-			lexer->token.len = 2;
+			end++;
+		} else if (*end == '>') {
 			lexer->token.detail = TOKEN_DETAIL_ARROW;
-			lexer->cur++;
-		} else if (*lexer->cur == '=') {
-			lexer->token.len = 2;
+			end++;
+		} else if (*end == '=') {
 			lexer->token.detail = TOKEN_DETAIL_MINUS_ASSIGN;
-			lexer->cur++;
+			end++;
 		} else {
-			lexer->token.len = 1;
 			lexer->token.detail = TOKEN_DETAIL_MINUS;
 		}
 		break;
 	case '<':
 		lexer->token.kind = TOKEN_PUNCTUATOR;
-		lexer->token.start = lexer->cur++;
-		if (*lexer->cur == '<') {
-			lexer->cur++;
-			if (*lexer->cur == '=') {
-				lexer->cur++;
-				lexer->token.len = 3;
+		end = lexer->cur + 1;
+		if (*end == '<') {
+			end++;
+			if (*end == '=') {
+				end++;
 				lexer->token.detail = TOKEN_DETAIL_LSHIFT_ASSIGN;
 			} else {
-				lexer->token.len = 2;
 				lexer->token.detail = TOKEN_DETAIL_LSHIFT;
 			}
-		} else if (*lexer->cur == '=') {
-			lexer->cur++;
-			lexer->token.len = 2;
+		} else if (*end == '=') {
+			end++;
 			lexer->token.detail = TOKEN_DETAIL_LOWER_EQUAL;
-		} else if (*lexer->cur == ':') { // digraph
-			lexer->cur++;
-			lexer->token.len = 2;
+		} else if (*end == ':') { // digraph
+			end++;
 			lexer->token.detail = TOKEN_DETAIL_LSQUARE_BRACKET;
-		} else if (*lexer->cur == '%') { // digraph
-			lexer->cur++;
-			lexer->token.len = 2;
+		} else if (*end == '%') { // digraph
+			end++;
 			lexer->token.detail = TOKEN_DETAIL_LCURLY_BRACE;
 		} else {
-			lexer->token.len = 1;
 			lexer->token.detail = TOKEN_DETAIL_LOWER;
 		}
 		break;
@@ -273,14 +254,22 @@ again:
 #undef CASE1
 	default:
 		printf("unexpected character '%c' (ASCII %d) in program.\n", *lexer->cur, *lexer->cur);
-		lexer->token.kind = TOKEN_NONE;
-		lexer->token.start = lexer->cur++;
-		lexer->token.len = 1;
+		end = NULL;
 		break;
+	}
+	if (end) {
+		lexer->token.len = end - lexer->token.start;
+		lexer->cur = end;
+	} else {
+		lexer->token.kind = TOKEN_NONE;
+		lexer->token.detail = TOKEN_DETAIL_NONE;
+		lexer->token.len = 1;
+		lexer->cur++;
 	}
 	printf("at token: ");
 	print_token(&lexer->token);
 	printf("\n");
+	return LEXER_VALID;
 }
 
 void lexer_dump(const struct Lexer *lexer) {
@@ -395,7 +384,7 @@ uint32_t read_escape_sequence(char *start, char **endptr) {
 	return value;
 }
 
-static void lex_word(struct Lexer *lexer) {
+static char *lex_word(struct Lexer *lexer) {
 	char *start = lexer->cur, *end = start;
 	while (isalnum(*end) || *end == '_') end++;
 	if (*end == '\0') {
@@ -411,34 +400,36 @@ static void lex_word(struct Lexer *lexer) {
 		lexer->token.detail = TOKEN_DETAIL_IDENTIFIER;
 		if (!intern_string(&lexer->identifiers, start, len)) {
 			fprintf(stderr, "could not intern string `%.*s`.\n", (int) len, start);
-			lexer->token.kind = TOKEN_NONE;
+			return start;
 		}
 	}
 	lexer->token.start = start;
-	lexer->cur = end;
 	lexer->token.len = len;
+	return end;
 }
 
-void lex_number(struct Lexer *lexer) {
+char *lex_number(struct Lexer *lexer) {
 	int base = 10;
 	char *cur = lexer->cur;
 	if (*cur++ == '0') {
 		if (tolower(*cur) == 'x') {
 			base = 16;
 			cur++;
+			while (isxdigit(*cur)) cur++;
 		} else {
 			base = 8;
+			while (*cur >= '0' && *cur <= '7') cur++;
 		}
-	}
-	while (isxdigit(*cur)) cur++;
-	if (*cur == '.' || tolower(*cur) == 'e' || tolower(*cur) == 'p') {
-		lex_floating(lexer, base);
 	} else {
-		lex_integer(lexer, base);
+		while (isdigit(*cur)) cur++;
 	}
+	if (*cur == '.' || tolower(*cur) == 'e' || tolower(*cur) == 'p') {
+		return lex_floating(lexer, base);
+	}
+	return lex_integer(lexer, base);
 }
 
-void lex_character(struct Lexer *lexer) {
+char *lex_character(struct Lexer *lexer) {
 	char *start = lexer->cur, *end = start + 1;
 	uint32_t value = 0;
 	if (*start != '\'') __builtin_unreachable();
@@ -448,27 +439,19 @@ void lex_character(struct Lexer *lexer) {
 		if (*end++ != '\\') continue;
 		char *out = end;
 		value = read_escape_sequence(end, &out);
-		if (out == end) goto err;
+		if (out == end) return NULL;
 	}
 	if (*end == '\0') {
 		printf("unexpected end of file in character literal.\n");
-		goto err;
+		return NULL;
 	} else if (*end == '\n') {
 		printf("unexpected newline in character literal.\n");
-		goto err;
+		return NULL;
 	}
-	long len = end - start;
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_CHARACTER_CONSTANT;
-	lexer->token.start = start;
-	lexer->token.len = len;
 	lexer->token.character = value;
-	lexer->cur = end;
-	return;
-err:
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.detail = TOKEN_DETAIL_NONE;
-	lexer->cur = lexer->buf + lexer->len;
+	return end;
 }
 
 ptrdiff_t string_lit_len_narrow(char *str, char **endptr) {
@@ -483,7 +466,8 @@ ptrdiff_t string_lit_len_narrow(char *str, char **endptr) {
 	if (*end == '\0' || *end == '\n') {
 		len = -1;
 	}
-	if (endptr) *endptr = end;
+	assert(*end == '"');
+	if (endptr) *endptr = end + 1;
 	return len;
 }
 
@@ -497,32 +481,23 @@ void encode_narrow(char *out, char *in) {
 	}
 }
 
-void lex_string(struct Lexer *lexer) {
+char *lex_string(struct Lexer *lexer) {
 	char *start = lexer->cur, *end;
 	ptrdiff_t len = string_lit_len_narrow(start, &end);
 	lexer->token.kind = TOKEN_STRING_LITERAL;
 	lexer->token.detail = TOKEN_DETAIL_STRING_LITERAL;
-	lexer->token.start = start;
-	lexer->token.len = end - start + 1;
-	lexer->cur = end;
-	lexer->cur++;
-	if (len == -1) goto err;
+	if (len == -1) return NULL;
 
 	char *string = malloc(len+1);
 	if (!string) {
 		fprintf(stderr, "could not interpret string of length %ld.\n", len+1);
-		goto err;
-	} else {
-		encode_narrow(string, start);
-		string[len] = '\0';
-		lexer->token.string.start = string;
-		lexer->token.string.len = len;
+		return NULL;
 	}
-	return;
-err:
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.detail = TOKEN_DETAIL_NONE;
-	lexer->cur = lexer->buf + lexer->len;
+	encode_narrow(string, start);
+	string[len] = '\0';
+	lexer->token.string.start = string;
+	lexer->token.string.len = len;
+	return end;
 }
 
 uintmax_t read_integer(char *i, int base, char **endptr) {
@@ -542,18 +517,18 @@ end:
 	return 0;
 }
 
-void lex_integer(struct Lexer *lexer, int base) {
-	char *start = lexer->cur++, *end = start;
+char *lex_integer(struct Lexer *lexer, int base) {
+	char *start = lexer->cur, *end = start;
 	if (base == 16) {
 		end += 2;
 	}
-	char *out = end;
+	char *out;
 	uintmax_t val = read_integer(end, base, &out);
-	if (out == end) goto err;
+	if (out == end) return NULL;
 	end = out;
 	int usuffix = 0, lsuffix = 0, llsuffix = 0;
 	for (char suff, it = 0; suff = tolower(*end), suff == 'u' || suff == 'l'; end++, it++) {
-		if (it > 4) goto err; // no suffix is that long, but just incase of a degenerate case
+		if (it > 4) return NULL; // no suffix is that long, but just incase of a degenerate case
 		if (suff == 'u') {
 			usuffix++;
 		} else if (suff == 'l') {
@@ -574,21 +549,14 @@ void lex_integer(struct Lexer *lexer, int base) {
 	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 1) suffix = CONSTANT_AFFIX_ULL;
 	else {
 		printf("invalid integer constant suffix : '%.*s'.\n", (int)(end - out), out);
-		goto err;
+		return NULL;
 	}
 
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_INTEGER_CONSTANT;
-	lexer->token.start = start;
-	lexer->token.len = end - start;
 	lexer->token.integer = val;
-	lexer->cur = end;
 	lexer->token.affix = suffix;
-	return;
-err:
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.detail = TOKEN_DETAIL_NONE;
-	lexer->cur = lexer->buf + lexer->len;
+	return end;
 }
 
 long double read_floating_exponent(char *f, long double expbase, char **endptr) {
@@ -666,7 +634,7 @@ err:
 	return 0.0l;
 }
 
-void lex_floating(struct Lexer *lexer, int base) {
+char *lex_floating(struct Lexer *lexer, int base) {
 	char *start = lexer->cur, *end = start;
 	char *out = end;
 	long double val;
@@ -676,12 +644,12 @@ void lex_floating(struct Lexer *lexer, int base) {
 		end += 2; // skip 0x
 		val = read_floating_hexadecimal(end, &out);
 	}
-	if (out == end) goto err;
+	if (out == end) return NULL;
 	end = out;
 
 	int lsuffix = 0, fsuffix = 0;
 	for (char suff, it = 0; suff = tolower(*end), suff == 'l' || suff == 'f'; end++, it++) {
-		if (it > 4) goto err;
+		if (it > 4) return NULL;
 		if (suff == 'l') lsuffix++;
 		else             fsuffix++;
 	}
@@ -691,35 +659,24 @@ void lex_floating(struct Lexer *lexer, int base) {
 	else if (lsuffix == 0 && fsuffix == 1) suffix = CONSTANT_AFFIX_F;
 	else {
 		printf("invalid floating constant suffix : '%.*s'.\n", (int)(end - out), out);
-		goto err;
+		return NULL;
 	}
 
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_FLOATING_CONSTANT;
-	lexer->token.start = start;
-	lexer->token.len = end - start;
-	lexer->cur = end;
 	lexer->token.affix = suffix;
 	lexer->token.floating = val;
-	return;
-err:
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.detail = TOKEN_DETAIL_NONE;
-	lexer->cur = lexer->buf + lexer->len;
+	return end;
 }
 
-void lex_wide_character(struct Lexer *lexer) {
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.start = lexer->cur;
-	lexer->token.len = 1;
-	lexer->cur++;
+char *lex_wide_character(struct Lexer *lexer) {
+	(void) lexer;
+	return NULL;
 }
 
-void lex_wide_string(struct Lexer *lexer) {
-	lexer->token.kind = TOKEN_NONE;
-	lexer->token.start = lexer->cur;
-	lexer->token.len = 1;
-	lexer->cur++;
+char *lex_wide_string(struct Lexer *lexer) {
+	(void) lexer;
+	return NULL;
 }
 
 static int print_token(const struct Token *token) {

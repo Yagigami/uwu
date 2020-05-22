@@ -10,9 +10,9 @@ int lex_test(void) {
 		fprintf(stderr, "could not initialize lexer with file `%s`.\n", f);
 		goto end;
 	}
-	do {
-		lexer_next(&lexer);
-	} while (*lexer.cur);
+	while (lexer_next(&lexer) != LEXER_END) {
+		(void) 0;
+	}
 	lexer_dump(&lexer);
 	lexer_fini(&lexer);
 end:

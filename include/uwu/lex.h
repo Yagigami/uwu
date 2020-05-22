@@ -34,7 +34,7 @@ struct Lexer {
 
 int lexer_init(struct Lexer *lexer, const char *name);
 void lexer_fini(struct Lexer *lexer);
-void lexer_next(struct Lexer *lexer);
+enum LexerStatus lexer_next(struct Lexer *lexer);
 void lexer_dump(const struct Lexer *lexer);
 
 #endif /* C_UWU_LEX_H */
