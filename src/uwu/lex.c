@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <stddef.h>
 #include <assert.h>
+#include <math.h>
 
 #include "uwu/lex.h"
 #include "stream/stream.h"
@@ -35,6 +36,12 @@ static inline void expect_token(struct Lexer *lexer, enum TokenDetail detail) {
 	}
 }
 
+int char2hex(char c) {
+	char l = tolower(c);
+	if (l > '9') return l - 'a' + 0xa;
+	return l - '0';
+}
+
 static bool is_valid_universal(uint32_t c);
 static uint8_t xtoint(char x);
 static uint32_t xstoint(char *x, int n, char **endptr);
@@ -46,6 +53,7 @@ static void lex_character(struct Lexer *lexer);
 static void lex_string(struct Lexer *lexer);
 static void lex_integer(struct Lexer *lexer, int base);
 static void lex_floating(struct Lexer *lexer, int base);
+static void lex_wide_character(struct Lexer *lexer);
 static void lex_wide_string(struct Lexer *lexer);
 
 static int print_token(const struct Token *token);
@@ -86,6 +94,11 @@ void lexer_next(struct Lexer *lexer) {
 		free(lexer->token.string.start);
 	}
 again:
+	if ((uint8_t) *lexer->cur >= 0x80) {
+		char *s = lexer->cur;
+		while ((uint8_t) *lexer->cur >= 0x80) lexer->cur++;
+		printf("non ASCII character in input: '%.*s', skipping.\n", (int)(lexer->cur - s), s);
+	}
 	switch (*lexer->cur) {
 	case ' ':
 	case '\t':
@@ -104,7 +117,7 @@ again:
 		lexer->token.len = 1;
 		break;
 	case 'L':
-		if (lexer->cur[1] == '\'') lex_character(lexer);
+		if (lexer->cur[1] == '\'') lex_wide_character(lexer);
 		else if (lexer->cur[1] == '"') lex_wide_string(lexer);
 		else lex_word(lexer);
 		break;
@@ -302,73 +315,83 @@ uint8_t xtoint(char x) {
 
 uint32_t xstoint(char *x, int n, char **endptr) {
 	uint32_t value = 0;
-	for (int i = 0; i < n; i++) {
-		if (!isxdigit(*x)) {
-			printf("unexpected end of hex-sequence (%d characters instead of expected %d).\n", i, n);
-			break;
-		}
-		value <<= 4;
-		value |= xtoint(*x);
+	char *cur = x;
+	for (int i = 0; i < n; i++, cur++) {
+		if (!isxdigit(*cur)) goto err;
+		value = value * 16 | xtoint(*cur);
 	}
-	if (endptr) *endptr = x;
+	if (endptr) *endptr = cur;
 	return value;
+err:
+	if (endptr) *endptr = x;
+	return 0;
 }
 
 uint32_t read_escape_sequence(char *start, char **endptr) {
 	uint32_t value = 0;
-	switch (*start) {
+	char *end = start;
+	switch (*end) {
 	case '\'':
 	case '"':
 	case '?':
 	case '\\':
-		value = *start++;
+		value = *end++;
 		break;
 	case 'a':
 		value = '\a';
-		start++;
+		end++;
 		break;
 	case 'b':
 		value = '\b';
-		start++;
+		end++;
 		break;
 	case 'f':
 		value = '\f';
-		start++;
+		end++;
 		break;
 	case 'n':
 		value = '\n';
-		start++;
+		end++;
 		break;
 	case 'r':
 		value = '\r';
-		start++;
+		end++;
 		break;
 	case 't':
 		value = '\t';
-		start++;
+		end++;
 		break;
 	case 'v':
 		value = '\v';
-		start++;
+		end++;
 		break;
-	case '0' ... '9':
-		for (int i = 0; i < 3 && *start >= '0' && *start <= '7'; i++, start++) {
-			value <<= 3;
-			value |= *start - '0';
-		}
+	case '0' ... '7':
+		for (int i = 0; i < 3 && *end >= '0' && *end <= '7'; i++, end++)
+			value = value * 8 | (*end - '0');
 		break;
 	case 'x':
-		value = xstoint(start, 2, &start);
+		// having 1 character is okay here
+		for (int i = 0; i < 2 && isxdigit(*end); i++, end++)
+			value = value * 16 | char2hex(*end);
 		break;
 	case 'u':
+		// skip the u/U
+		value = xstoint(start+1, 4, &end);
+		if (end == start+1) {
+			printf("universal character escape sequence needs 4 nibbles.\n");
+		}
+		break;
 	case 'U':
-		printf("universal characters are unhandled.\n");
+		value = xstoint(start+1, 8, &end);
+		if (end == start+1) {
+			printf("universal character escape sequence needs 8 nibbles.\n");
+		}
 		break;
 	default:
-		printf("unknown escape sequence `\\%c`.\n", *start);
+		printf("unknown escape sequence `\\%c`.\n", *end);
 		break;
 	}
-	if (endptr) *endptr = start;
+	if (endptr) *endptr = end;
 	return value;
 }
 
@@ -423,7 +446,9 @@ void lex_character(struct Lexer *lexer) {
 		value <<= 8;
 		value |= *end;
 		if (*end++ != '\\') continue;
-		value = read_escape_sequence(end, &end);
+		char *out = end;
+		value = read_escape_sequence(end, &out);
+		if (out == end) goto err;
 	}
 	if (*end == '\0') {
 		printf("unexpected end of file in character literal.\n");
@@ -500,12 +525,6 @@ err:
 	lexer->cur = lexer->buf + lexer->len;
 }
 
-int char2hex(char c) {
-	char l = tolower(c);
-	if (l > '9') return l - 'a' + 0xa;
-	return l - '0';
-}
-
 uintmax_t read_integer(char *i, int base, char **endptr) {
 	uintmax_t val = 0;
 	char *c = i;
@@ -534,7 +553,7 @@ void lex_integer(struct Lexer *lexer, int base) {
 	end = out;
 	int usuffix = 0, lsuffix = 0, llsuffix = 0;
 	for (char suff, it = 0; suff = tolower(*end), suff == 'u' || suff == 'l'; end++, it++) {
-		if (it > 64) goto err; // no number is that long, but just incase of a degenerate case
+		if (it > 4) goto err; // no suffix is that long, but just incase of a degenerate case
 		if (suff == 'u') {
 			usuffix++;
 		} else if (suff == 'l') {
@@ -546,25 +565,25 @@ void lex_integer(struct Lexer *lexer, int base) {
 			}
 		}
 	}
+	enum ConstantAffix suffix;
+	if      (usuffix == 0 && lsuffix == 0 && llsuffix == 0) suffix = CONSTANT_AFFIX_NONE;
+	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 0) suffix = CONSTANT_AFFIX_U;
+	else if (usuffix == 0 && lsuffix == 1 && llsuffix == 0) suffix = CONSTANT_AFFIX_L;
+	else if (usuffix == 0 && lsuffix == 0 && llsuffix == 1) suffix = CONSTANT_AFFIX_LL;
+	else if (usuffix == 1 && lsuffix == 1 && llsuffix == 0) suffix = CONSTANT_AFFIX_UL;
+	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 1) suffix = CONSTANT_AFFIX_ULL;
+	else {
+		printf("invalid integer constant suffix : '%.*s'.\n", (int)(end - out), out);
+		goto err;
+	}
+
 	lexer->token.kind = TOKEN_CONSTANT;
 	lexer->token.detail = TOKEN_DETAIL_INTEGER_CONSTANT;
 	lexer->token.start = start;
 	lexer->token.len = end - start;
-	lexer->token.integer.value = val;
+	lexer->token.integer = val;
 	lexer->cur = end;
-
-	enum IntegerSuffix suffix;
-	if      (usuffix == 0 && lsuffix == 0 && llsuffix == 0) suffix = INTEGER_SUFFIX_NONE;
-	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 0) suffix = INTEGER_SUFFIX_U;
-	else if (usuffix == 0 && lsuffix == 1 && llsuffix == 0) suffix = INTEGER_SUFFIX_L;
-	else if (usuffix == 0 && lsuffix == 0 && llsuffix == 1) suffix = INTEGER_SUFFIX_LL;
-	else if (usuffix == 1 && lsuffix == 1 && llsuffix == 0) suffix = INTEGER_SUFFIX_UL;
-	else if (usuffix == 1 && lsuffix == 0 && llsuffix == 1) suffix = INTEGER_SUFFIX_ULL;
-	else {
-		printf("invalid integer constant suffix.\n");
-		goto err;
-	}
-	lexer->token.integer.suffix = suffix;
+	lexer->token.affix = suffix;
 	return;
 err:
 	lexer->token.kind = TOKEN_NONE;
@@ -572,7 +591,124 @@ err:
 	lexer->cur = lexer->buf + lexer->len;
 }
 
+long double read_floating_exponent(char *f, long double expbase, char **endptr) {
+	char *cur = f + 1; // skip e/E/p/P
+	long double sign = +1.0l;
+	if (*cur == '+') {
+		cur++;
+	} else if (*cur == '-') {
+		cur++;
+		sign = -1.0l;
+	}
+
+	// cannot use read_integer because 10f is a valid decimal exponent but not integer
+	uintmax_t e = 0;
+	while (isdigit(*cur)) {
+		int i = char2hex(*cur);
+		if (i >= 10) goto err;
+		uintmax_t next = e * 10 + i;
+		if (next < e) {
+			printf("exponent of floating constant overflows.\n");
+		}
+		e = next;
+		cur++;
+	}
+	if (endptr) *endptr = cur;
+	return powl(expbase, e * sign);
+err:
+	if (endptr) *endptr = f;
+	return 0.0l;
+}
+
+long double read_floating_decimal(char *f, char **endptr) {
+	long double d = 0.0l, base = 10.0l;
+	char *cur = f;
+	for (; isdigit(*cur); cur++)
+		d = d * base + char2hex(*cur); // no need to worry about overflow in floating point
+	if (*cur == '.') {
+		cur++;
+		for (long double div = base; isdigit(*cur); div *= base, cur++)
+			d += char2hex(*cur) / div;
+	}
+	if (tolower(*cur) == 'e') {
+		char *out = cur;
+		d *= read_floating_exponent(cur, 10.0l, &out);
+		if (out == cur) goto err;
+		cur = out;
+	}
+	if (endptr) *endptr = cur;
+	return d;
+err:
+	if (endptr) *endptr = f;
+	return 0.0l;
+}
+
+long double read_floating_hexadecimal(char *f, char **endptr) {
+	long double d = 0.0l, base = 16.0l;
+	char *cur = f;
+	for (; isxdigit(*cur); cur++)
+		d = d * base + char2hex(*cur);
+	if (*cur == '.') {
+		cur++;
+		for (long double div = base; isxdigit(*cur); div *= base, cur++)
+			d += char2hex(*cur) / div;
+	}
+	if (tolower(*cur) == 'p') {
+		char *out = cur;
+		d *= read_floating_exponent(cur, 2.0l, &out);
+		if (out == cur) goto err;
+		cur = out;
+	}
+	if (endptr) *endptr = cur;
+	return d;
+err:
+	if (endptr) *endptr = f;
+	return 0.0l;
+}
+
 void lex_floating(struct Lexer *lexer, int base) {
+	char *start = lexer->cur, *end = start;
+	char *out = end;
+	long double val;
+	if (base == 10) {
+		val = read_floating_decimal(end, &out);
+	} else if (base == 16) {
+		end += 2; // skip 0x
+		val = read_floating_hexadecimal(end, &out);
+	}
+	if (out == end) goto err;
+	end = out;
+
+	int lsuffix = 0, fsuffix = 0;
+	for (char suff, it = 0; suff = tolower(*end), suff == 'l' || suff == 'f'; end++, it++) {
+		if (it > 4) goto err;
+		if (suff == 'l') lsuffix++;
+		else             fsuffix++;
+	}
+	enum ConstantAffix suffix;
+	if      (lsuffix == 0 && fsuffix == 0) suffix = CONSTANT_AFFIX_NONE;
+	else if (lsuffix == 1 && fsuffix == 0) suffix = CONSTANT_AFFIX_L;
+	else if (lsuffix == 0 && fsuffix == 1) suffix = CONSTANT_AFFIX_F;
+	else {
+		printf("invalid floating constant suffix : '%.*s'.\n", (int)(end - out), out);
+		goto err;
+	}
+
+	lexer->token.kind = TOKEN_CONSTANT;
+	lexer->token.detail = TOKEN_DETAIL_FLOATING_CONSTANT;
+	lexer->token.start = start;
+	lexer->token.len = end - start;
+	lexer->cur = end;
+	lexer->token.affix = suffix;
+	lexer->token.floating = val;
+	return;
+err:
+	lexer->token.kind = TOKEN_NONE;
+	lexer->token.detail = TOKEN_DETAIL_NONE;
+	lexer->cur = lexer->buf + lexer->len;
+}
+
+void lex_wide_character(struct Lexer *lexer) {
 	lexer->token.kind = TOKEN_NONE;
 	lexer->token.start = lexer->cur;
 	lexer->token.len = 1;
@@ -604,12 +740,12 @@ static int print_token(const struct Token *token) {
 		case TOKEN_DETAIL_INTEGER_CONSTANT:
 			prn += printf("%s%ju%s",
 					token_detail_to_str[token->detail],
-					token->integer.value,
-					integer_suffix_to_str[token->integer.suffix]
+					token->integer,
+					constant_suffix_to_str[token->affix]
 			);
 			break;
 		case TOKEN_DETAIL_FLOATING_CONSTANT:
-			prn += printf("%s%Lg", token_detail_to_str[token->detail], token->floating);
+			prn += printf("%s%.9Lg%s", token_detail_to_str[token->detail], token->floating, constant_suffix_to_str[token->affix]);
 			break;
 		case TOKEN_DETAIL_ENUMERATION_CONSTANT:
 			prn += printf("%s%.*s", token_detail_to_str[token->detail], token->len, token->start);

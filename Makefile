@@ -7,7 +7,7 @@ WARNINGS := all extra format=2 format-overflow=2 init-self \
 	parentheses unreachable-code missing-field-initializers \
 	unused
 CFLAGS   := -std=c99 -ggdb3 -fPIC $(addprefix -I,$(INCLUDE)) $(addprefix -W,$(WARNINGS))
-LIBS     := 
+LIBS     := m
 LDFLAGS  := $(addprefix -l,$(LIBS)) $(addprefix -L,$(DIRS))
 LTO      ?= 0
 DEBUG    ?= 1
