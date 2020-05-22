@@ -710,6 +710,8 @@ static int print_token(const struct Token *token) {
 		case TOKEN_DETAIL_CHARACTER_CONSTANT:
 			prn += printf("%s'%c'", token_detail_to_str[token->detail], token->character);
 			break;
+		case TOKEN_DETAIL_NONE ... TOKEN_DETAIL_INTEGER_CONSTANT - 1:
+		case TOKEN_DETAIL_CHARACTER_CONSTANT + 1 ... TOKEN_DETAIL_NUM:
 		default:
 			__builtin_unreachable();
 		}
