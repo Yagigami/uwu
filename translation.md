@@ -15,7 +15,7 @@
 	* [ ] string-literal concatenation
 
 2. compilation (uwu)
-	* [ ] tokenization
+	* [x] tokenization
 	* [ ] syntactic analysis
 	* [ ] parsing
 	* [ ] semantic analysis

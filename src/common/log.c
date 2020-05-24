@@ -477,6 +477,7 @@ long uwuvfprintf(Stream stream, const char *fmt, va_list args) {
 			break;
 		case '%':
 			if (cur[-1] != '%') break;
+			info.stage = STAGE_END;
 			break;
 		case 'c':
 			info.stage = STAGE_END;
