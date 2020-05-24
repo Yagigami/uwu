@@ -1,7 +1,7 @@
-#ifndef C_TESTS_H
-#define C_TESTS_H
+#ifndef C_COMMON_TESTS_H
+#define C_COMMON_TESTS_H
 
-void run_tests(int argc, char **argv);
+int common_tests(void);
 
-#endif /* C_TESTS_H */
+#endif /* C_COMMON_TESTS_H */
 
