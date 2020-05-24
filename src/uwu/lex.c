@@ -497,6 +497,7 @@ ptrdiff_t string_lit_len_narrow(const uint8_t *str, uint32_t boundary, uint8_t *
 		if (*end++ != '\\') continue;
 		uint8_t *out;
 		uint32_t cp = read_escape_sequence(end, &out);
+		if (out == end) goto err;
 		end = out;
 		len += len_character_utf_8(cp) - 1; // already incremented
 	}
@@ -505,6 +506,9 @@ ptrdiff_t string_lit_len_narrow(const uint8_t *str, uint32_t boundary, uint8_t *
 	end++;
 	if (endptr) *endptr = (uint8_t *) end;
 	return len;
+err:
+	if (endptr) *endptr = (uint8_t *) str;
+	return -1;
 }
 
 void encode_narrow(uint8_t *out, uint32_t boundary, const uint8_t *in) {
@@ -520,7 +524,7 @@ void encode_narrow(uint8_t *out, uint32_t boundary, const uint8_t *in) {
 		uint8_t *end;
 		uint32_t cp = read_escape_sequence(in, &end);
 		in = end;
-		encode_utf_8(c, cp, &c);
+		c += encode_utf_8(c, &cp, 1);
 	}
 }
 
@@ -841,7 +845,7 @@ int print_token(const struct Token *token) {
 		} else if (token->detail == TOKEN_DETAIL_WIDE_STRING_LITERAL) {
 			prn += printf("%s\"%.*ls\"",
 					token_detail_to_str[token->detail],
-					token->wstring.len,
+					(int) encode_utf_8_len(token->wstring.start, NULL),
 					token->wstring.start
 			);
 		} else __builtin_unreachable();

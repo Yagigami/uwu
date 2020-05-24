@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define MAX_STREAM_NAME (128)
 
@@ -16,9 +17,9 @@ enum StreamEncoding {
 struct Stream {
 	char *name;
 	char *ext;
-	long len;
-	long size;
 	FILE *f;
+	ptrdiff_t len;
+	ptrdiff_t size;
 	enum StreamEncoding enc;
 };
 
@@ -36,7 +37,7 @@ Stream stream_init(const char *title, int mode) {
 	struct Stream *stream = malloc(sizeof (*stream));
 	if (!stream) goto alloc_fail;
 	
-	long l = strlen(title);
+	ptrdiff_t l = strlen(title);
 	stream->name = malloc(l+1);
 	if (!stream->name) goto copy_fail;
 	strcpy(stream->name, title);
@@ -69,39 +70,55 @@ void stream_fini(Stream stream) {
 	}
 }
 
-const char *stream_name(Stream stream, long *len) {
+const char *stream_name(Stream stream, ptrdiff_t *len) {
 	if (len) *len = stream->len;
 	return stream->name;
 }
 
-const char *stream_basename(Stream stream, long *len) {
+const char *stream_basename(Stream stream, ptrdiff_t *len) {
 	if (len) *len = stream->ext - stream->name;
 	return stream->name;
 }
 
-const char *stream_extension(Stream stream, long *len) {
+const char *stream_extension(Stream stream, ptrdiff_t *len) {
 	if (len) *len = stream->len - (stream->ext - stream->name);
 	return stream->ext;
 }
 
 long stream_size(Stream stream) {
 	if (stream->size) return stream->size;
-	long pos = ftell(stream->f);
+	if (stream == uwunull) return 0;
+	ptrdiff_t pos = ftell(stream->f);
 	fseek(stream->f, 0, SEEK_END);
 	stream->size = ftell(stream->f);
 	fseek(stream->f, 0, pos);
 	return stream->size;
 }
 
-long stream_read(Stream stream, void *buf, long size) {
-	long r = fread(buf, 1, size, stream->f);
+ptrdiff_t stream_read(Stream stream, void *buf, ptrdiff_t size) {
+	if (stream == uwunull) {
+		if (!memset(buf, 0, size)) return -1;
+		return size;
+	}
+	ptrdiff_t r = fread(buf, 1, size, stream->f);
 	if (r != size && ferror(stream->f)) return r;
 	if (is_valid_buffer_utf_8(buf, size)) return r;
 	return -1;
 }
 
-long stream_write(Stream stream, const void *buf, long size) {
+ptrdiff_t stream_write(Stream stream, const void *buf, ptrdiff_t size) {
+	if (stream == uwunull) return size;
 	return fwrite(buf, 1, size, stream->f);
+}
+
+ptrdiff_t stream_encode_len(Stream stream, const void *src, void **endptr) {
+	if (stream->enc != ENC_UTF_8) return -1;
+	return encode_utf_8_len(src, (uint32_t **) endptr);
+}
+
+ptrdiff_t stream_encode(Stream stream, void *dst, const void *src, ptrdiff_t num) {
+	if (stream->enc != ENC_UTF_8) return -1;
+	return encode_utf_8(dst, src, num);
 }
 
 char *stream_getline(Stream stream, long *len) {
@@ -133,4 +150,32 @@ err:
 	return NULL;
 }
 
+Stream __uwuin(void) {
+	static struct Stream s = { 0 };
+	if (!s.f) {
+		s.f = stdin;
+	}
+	return &s;
+}
+
+Stream __uwuout(void) {
+	static struct Stream s = { 0 };
+	if (!s.f) {
+		s.f = stdout;
+	}
+	return &s;
+}
+
+Stream __uwuerr(void) {
+	static struct Stream s = { 0 };
+	if (!s.f) {
+		s.f = stderr;
+	}
+	return &s;
+}
+
+Stream __uwunull(void) {
+	static struct Stream s = { 0 };
+	return &s;
+}
 
