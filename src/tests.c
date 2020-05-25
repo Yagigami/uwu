@@ -2,6 +2,7 @@
 #include <pp/tests.h>
 #include <uwu/tests.h>
 #include <common/tests.h>
+#include <ast/tests.h>
 
 #include <stdio.h>
 
@@ -12,6 +13,7 @@ void run_tests(int argc, char **argv) {
 		&pp_test,
 		&lex_test,
 		&common_test,
+		&ast_test,
 	}, (**end) (void) = tests + sizeof (tests) / sizeof (*tests);
 	for (int (**test) (void) = tests; test != end; test++) {
 		int err = (*test)();

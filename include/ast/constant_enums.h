@@ -1,0 +1,5 @@
+#ifndef C_AST_CONSTANT_ENUMS_H
+#define C_AST_CONSTANT_ENUMS_H
+
+#endif /* C_AST_CONSTANT_ENUMS_H */
+
