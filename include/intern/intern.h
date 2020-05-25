@@ -2,22 +2,23 @@
 #define C_INTERN_INTERN_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 struct Interns {
+	ptrdiff_t len, cap;
 	struct InternString *interns;
-	long len, cap;
 };
 
 struct InternString {
+	ptrdiff_t len;
 	uint8_t *str;
-	long len;
 };
 
 int intern_init(struct Interns *interns);
 void intern_fini(struct Interns *interns);
-const struct InternString *intern_string(struct Interns *interns, const uint8_t *str, long len);
-const struct InternString *intern_find(const struct Interns *interns, const uint8_t *str, long len);
-bool intern_contains(const struct Interns *interns, const uint8_t *str, long len);
+const struct InternString *intern_string(struct Interns *interns, const uint8_t *str, ptrdiff_t len);
+const struct InternString *intern_find(const struct Interns *interns, const uint8_t *str, ptrdiff_t len);
+bool intern_contains(const struct Interns *interns, const uint8_t *str, long ptrdiff_t);
 
 int print_interns(const struct Interns *interns);
 int print_intern(const struct InternString *intern);

@@ -1,8 +1,10 @@
 #ifndef C_DATA_H
 #define C_DATA_H
 
-extern const char *token_detail_to_str[];
-extern const char *constant_suffix_to_str[];
+#include <common/enums.h>
+
+extern const char *token2str[TOKEN_END];
+extern const char *affix2str[CONSTANT_AFFIX_END];
 
 #endif /* C_DATA_H */
 

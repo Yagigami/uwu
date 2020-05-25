@@ -15,25 +15,24 @@
 #include "common/data.h"
 #include <stream/utf-8.h>
 
-static int keyword_id(const uint8_t *str, long len);
+static enum TokenKind keyword_id(const uint8_t *str, ptrdiff_t len);
 
-static inline bool is_token(struct Lexer *lexer, enum TokenDetail detail) {
-	return lexer->token.detail == detail;
+static inline bool is_token(struct Lexer *lexer, enum TokenKind kind) {
+	return lexer->token.kind == kind;
 }
 
-static inline bool match_token(struct Lexer *lexer, enum TokenDetail detail) {
-	if (is_token(lexer, detail)) {
+static inline bool match_token(struct Lexer *lexer, enum TokenKind kind) {
+	if (is_token(lexer, kind)) {
 		lexer_next(lexer);
 		return true;
 	}
 	return false;
 }
 
-static inline void expect_token(struct Lexer *lexer, enum TokenDetail detail) {
-	if (!match_token(lexer, detail)) {
-		printf("expected token detail %d, got %d.\n", detail, lexer->token.detail);
+static inline void expect_token(struct Lexer *lexer, enum TokenKind kind) {
+	if (!match_token(lexer, kind)) {
+		printf("expected token detail %d, got %d.\n", kind, lexer->token.kind);
 		lexer->token.kind = TOKEN_NONE;
-		lexer->token.detail = TOKEN_DETAIL_NONE;
 		lexer->cur = lexer->buf + lexer->len;
 	}
 }
@@ -94,14 +93,15 @@ void lexer_fini(struct Lexer *lexer) {
 
 enum LexerStatus lexer_next(struct Lexer *lexer) {
 	if (!lexer->cur) goto empty;
-	if (lexer->token.detail == TOKEN_DETAIL_STRING_LITERAL) {
-		free(lexer->token.string.start);
-	} else if (lexer->token.detail == TOKEN_DETAIL_WIDE_STRING_LITERAL) {
-		free(lexer->token.wstring.start);
+	if (lexer->token.kind == TOKEN_STRING_LITERAL) {
+		free(lexer->token.lit.sequence);
 	}
 	const uint8_t *end;
 again:
+#ifndef NDEBUG
 	lexer->token.start = lexer->cur;
+#endif
+	;
 	uint8_t *out;
 	uint32_t cp = codepoint_utf_8(lexer->cur, &out);
 	end = out;
@@ -144,12 +144,11 @@ again:
 			end = lex_floating(lexer, 10);
 		} else {
 			end = lexer->cur;
-			lexer->token.kind = TOKEN_PUNCTUATOR;
 			if (*end == '.' && lexer->cur[1] == '.') {
-				lexer->token.detail = TOKEN_DETAIL_ELLIPSIS;
+				lexer->token.kind = TOKEN_ELLIPSIS;
 				end += 2;
 			} else {
-				lexer->token.detail = TOKEN_DETAIL_DOT;
+				lexer->token.kind = TOKEN_DOT;
 			}
 		}
 		break;
@@ -157,37 +156,34 @@ again:
 // for ~, !, =, ...
 #define CASE1(k1, v1) \
 	case k1: \
-		lexer->token.kind = TOKEN_PUNCTUATOR; \
 		end = lexer->cur + 1; \
-		lexer->token.detail = TOKEN_DETAIL_ ## v1; \
+		lexer->token.kind = TOKEN_ ## v1; \
 		break
 
 // for */*=, %,%=, ...
 #define CASE2(k1, v1, k2, v2) \
 	case k1: \
-		lexer->token.kind = TOKEN_PUNCTUATOR; \
 		end = lexer->cur + 1; \
 		if (*end == k2) { \
-			lexer->token.detail = TOKEN_DETAIL_ ## v2; \
+			lexer->token.kind = TOKEN_ ## v2; \
 			end++; \
 		} else { \
-			lexer->token.detail = TOKEN_DETAIL_ ## v1; \
+			lexer->token.kind = TOKEN_ ## v1; \
 		} \
 		break
 
 // for +/++/+=, ...
 #define CASE3(k1, v1, k2, v2, k3, v3) \
 	case k1: \
-		lexer->token.kind = TOKEN_PUNCTUATOR; \
 		end = lexer->cur + 1; \
 		if (*end == k2) { \
-			lexer->token.detail = TOKEN_DETAIL_ ## v2; \
+			lexer->token.kind = TOKEN_ ## v2; \
 			end++; \
 		} else if (*end == k3) { \
-			lexer->token.detail = TOKEN_DETAIL_ ## v3; \
+			lexer->token.kind = TOKEN_ ## v3; \
 			end++; \
 		} else { \
-			lexer->token.detail = TOKEN_DETAIL_ ## v1; \
+			lexer->token.kind = TOKEN_ ## v1; \
 		} \
 		break
 
@@ -213,43 +209,41 @@ again:
 	CASE1(',', COMMA);
 
 	case '-':
-		lexer->token.kind = TOKEN_PUNCTUATOR;
 		end = lexer->cur + 1;
 		if (*end == '-') {
-			lexer->token.detail = TOKEN_DETAIL_DECREMENT;
+			lexer->token.kind = TOKEN_DECREMENT;
 			end++;
 		} else if (*end == '>') {
-			lexer->token.detail = TOKEN_DETAIL_ARROW;
+			lexer->token.kind = TOKEN_ARROW;
 			end++;
 		} else if (*end == '=') {
-			lexer->token.detail = TOKEN_DETAIL_MINUS_ASSIGN;
+			lexer->token.kind = TOKEN_MINUS_ASSIGN;
 			end++;
 		} else {
-			lexer->token.detail = TOKEN_DETAIL_MINUS;
+			lexer->token.kind = TOKEN_MINUS;
 		}
 		break;
 	case '<':
-		lexer->token.kind = TOKEN_PUNCTUATOR;
 		end = lexer->cur + 1;
 		if (*end == '<') {
 			end++;
 			if (*end == '=') {
 				end++;
-				lexer->token.detail = TOKEN_DETAIL_LSHIFT_ASSIGN;
+				lexer->token.kind = TOKEN_LSHIFT_ASSIGN;
 			} else {
-				lexer->token.detail = TOKEN_DETAIL_LSHIFT;
+				lexer->token.kind = TOKEN_LSHIFT;
 			}
 		} else if (*end == '=') {
 			end++;
-			lexer->token.detail = TOKEN_DETAIL_LOWER_EQUAL;
+			lexer->token.kind = TOKEN_LOWER_EQUAL;
 		} else if (*end == ':') { // digraph
 			end++;
-			lexer->token.detail = TOKEN_DETAIL_LSQUARE_BRACKET;
+			lexer->token.kind = TOKEN_LSQUARE_BRACKET;
 		} else if (*end == '%') { // digraph
 			end++;
-			lexer->token.detail = TOKEN_DETAIL_LCURLY_BRACE;
+			lexer->token.kind = TOKEN_LCURLY_BRACE;
 		} else {
-			lexer->token.detail = TOKEN_DETAIL_LOWER;
+			lexer->token.kind = TOKEN_LOWER;
 		}
 		break;
 
@@ -263,11 +257,12 @@ again:
 	}
 	if (!end) {
 		lexer->token.kind = TOKEN_NONE;
-		lexer->token.detail = TOKEN_DETAIL_NONE;
 		codepoint_utf_8(lexer->cur, &out);
 		end = out;
 	}
+#ifndef NDEBUG
 	lexer->token.len = end - lexer->token.start;
+#endif
 	lexer->cur = end;
 	return LEXER_VALID;
 }
@@ -281,13 +276,13 @@ void lexer_dump(const struct Lexer *lexer) {
 	print_interns(&lexer->identifiers);
 }
 
-static int keyword_id(const uint8_t *str, long len) {
+enum TokenKind keyword_id(const uint8_t *str, ptrdiff_t len) {
 	const struct Interns *kws = get_keyword_interns();
 	const struct InternString *in = intern_find(kws, str, len);
 	if (in) {
-		return in - kws->interns + TOKEN_DETAIL_KEYWORDS_START;
+		return in - kws->interns + TOKEN_KEYWORD_START;
 	}
-	return TOKEN_DETAIL_NONE;
+	return TOKEN_NONE;
 }
 
 bool is_valid_universal(uint32_t c) {
@@ -401,20 +396,17 @@ const uint8_t *lex_word(struct Lexer *lexer) {
 		return NULL;
 	}
 	long len = end - start;
-	int id;
-	if ((id = keyword_id(start, len)) != TOKEN_DETAIL_NONE) {
-		lexer->token.kind = TOKEN_KEYWORD;
-		lexer->token.detail = id;
+	enum TokenKind id;
+	if ((id = keyword_id(start, len)) != TOKEN_NONE) {
+		lexer->token.kind = id;
 	} else {
 		lexer->token.kind = TOKEN_IDENTIFIER;
-		lexer->token.detail = TOKEN_DETAIL_IDENTIFIER;
-		if (!intern_string(&lexer->identifiers, start, len)) {
+		lexer->token.ident.detail = intern_string(&lexer->identifiers, start, len);
+		if (!lexer->token.ident.detail) {
 			fprintf(stderr, "could not intern string `%.*s`.\n", (int) len, start);
 			return start;
 		}
 	}
-	lexer->token.start = start;
-	lexer->token.len = len;
 	return end;
 }
 
@@ -482,9 +474,10 @@ const uint8_t *lex_character(struct Lexer *lexer) {
 	uint8_t *out;
 	uint32_t value = read_character(start, false, &out);
 	if (out == start) return NULL;
-	lexer->token.kind = TOKEN_CONSTANT;
-	lexer->token.detail = TOKEN_DETAIL_CHARACTER_CONSTANT;
-	lexer->token.character = value;
+	lexer->token.kind = TOKEN_CHARACTER_CONSTANT;
+	lexer->token.cst.kind = CONSTANT_CHARACTER;
+	lexer->token.cst.character.prefix = CONSTANT_AFFIX_NONE;
+	lexer->token.cst.character.value = value;
 	return out;
 }
 
@@ -535,7 +528,6 @@ const uint8_t *lex_string(struct Lexer *lexer) {
 	if (len == -1) return NULL;
 	end = out;
 	lexer->token.kind = TOKEN_STRING_LITERAL;
-	lexer->token.detail = TOKEN_DETAIL_STRING_LITERAL;
 
 	uint8_t *string = malloc(len + 1);
 	if (!string) {
@@ -544,8 +536,9 @@ const uint8_t *lex_string(struct Lexer *lexer) {
 	}
 	encode_narrow(string, '"', start);
 	string[len] = '\0';
-	lexer->token.string.start = string;
-	lexer->token.string.len = len;
+	lexer->token.lit.sequence = string;
+	lexer->token.lit.len = len;
+	lexer->token.lit.prefix = CONSTANT_AFFIX_NONE;
 	return end;
 }
 
@@ -601,10 +594,10 @@ const uint8_t *lex_integer(struct Lexer *lexer, int base) {
 		return NULL;
 	}
 
-	lexer->token.kind = TOKEN_CONSTANT;
-	lexer->token.detail = TOKEN_DETAIL_INTEGER_CONSTANT;
-	lexer->token.integer = val;
-	lexer->token.affix = suffix;
+	lexer->token.kind = TOKEN_INTEGER_CONSTANT;
+	lexer->token.cst.kind = CONSTANT_INTEGER;
+	lexer->token.cst.integer.value = val;
+	lexer->token.cst.integer.suffix = suffix;
 	return end;
 }
 
@@ -711,10 +704,10 @@ const uint8_t *lex_floating(struct Lexer *lexer, int base) {
 		return NULL;
 	}
 
-	lexer->token.kind = TOKEN_CONSTANT;
-	lexer->token.detail = TOKEN_DETAIL_FLOATING_CONSTANT;
-	lexer->token.affix = suffix;
-	lexer->token.floating = val;
+	lexer->token.kind = TOKEN_FLOATING_CONSTANT;
+	lexer->token.cst.kind = CONSTANT_FLOATING;
+	lexer->token.cst.floating.value = val;
+	lexer->token.cst.floating.suffix = suffix;
 	return end;
 }
 
@@ -724,9 +717,10 @@ const uint8_t *lex_wide_character(struct Lexer *lexer) {
 	uint8_t *out;
 	uint32_t value = read_character(start, true, &out);
 	if (out == start) return NULL;
-	lexer->token.kind = TOKEN_CONSTANT;
-	lexer->token.detail = TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT;
-	lexer->token.character = value;
+	lexer->token.kind = TOKEN_CHARACTER_CONSTANT;
+	lexer->token.cst.kind = CONSTANT_CHARACTER;
+	lexer->token.cst.character.value = value;
+	lexer->token.cst.character.prefix = CONSTANT_AFFIX_L;
 	return out;
 }
 
@@ -781,7 +775,6 @@ const uint8_t *lex_wide_string(struct Lexer *lexer) {
 	if (len == -1) return NULL;
 	end = out;
 	lexer->token.kind = TOKEN_STRING_LITERAL;
-	lexer->token.detail = TOKEN_DETAIL_WIDE_STRING_LITERAL;
 
 	uint32_t *string = malloc((len + 1) * sizeof (*string));
 	if (!string) {
@@ -790,70 +783,72 @@ const uint8_t *lex_wide_string(struct Lexer *lexer) {
 	}
 	encode_wide(string, '"', start);
 	string[len] = '\0';
-	lexer->token.wstring.start = string;
-	lexer->token.wstring.len = len;
+	lexer->token.lit.sequence = string;
+	lexer->token.lit.len = len;
+	lexer->token.lit.prefix = CONSTANT_AFFIX_L;
 	return end;
 }
 
 int print_token(const struct Token *token) {
 	int prn = 0;
-	if (token->detail < TOKEN_DETAIL_NONE || token->detail >= TOKEN_DETAIL_NUM) __builtin_unreachable();
+	if (token->kind < TOKEN_NONE || token->kind >= TOKEN_END) __builtin_unreachable();
 	switch (token->kind) {
 	case TOKEN_NONE:
-		prn += printf("%s", token_detail_to_str[TOKEN_DETAIL_NONE]);
+		prn += printf("%s", token2str[TOKEN_NONE]);
 		break;
-	case TOKEN_KEYWORD:
-		prn += printf("%s", token_detail_to_str[token->detail]);
+	case TOKEN_KEYWORD_START ... TOKEN_KEYWORD_END - 1:
+		prn += printf("%s", token2str[token->kind]);
 		break;
 	case TOKEN_IDENTIFIER:
-		prn += printf("%s%.*s", token_detail_to_str[token->detail], token->len, token->start);
+		prn += printf("%s", token2str[token->kind]);
+		prn += print_intern(token->ident.detail);
 		break;
-	case TOKEN_CONSTANT:
-		switch (token->detail) {
-		case TOKEN_DETAIL_INTEGER_CONSTANT:
-			prn += printf("%s%ju%s",
-					token_detail_to_str[token->detail],
-					token->integer,
-					constant_suffix_to_str[token->affix]
-			);
-			break;
-		case TOKEN_DETAIL_FLOATING_CONSTANT:
-			prn += printf("%s%.9Lg%s", token_detail_to_str[token->detail], token->floating, constant_suffix_to_str[token->affix]);
-			break;
-		case TOKEN_DETAIL_ENUMERATION_CONSTANT:
-			prn += printf("%s%.*s", token_detail_to_str[token->detail], token->len, token->start);
-			break;
-		case TOKEN_DETAIL_CHARACTER_CONSTANT:
-			prn += printf("%s'%c'", token_detail_to_str[token->detail], token->character);
-			break;
-		case TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT:
-			prn += printf("%s'%lc'", token_detail_to_str[token->detail], token->character);
-			break;
-		case TOKEN_DETAIL_NONE ... TOKEN_DETAIL_INTEGER_CONSTANT - 1:
-		case TOKEN_DETAIL_WIDE_CHARACTER_CONSTANT + 1 ... TOKEN_DETAIL_NUM:
-		default:
-			__builtin_unreachable();
-		}
+	case TOKEN_INTEGER_CONSTANT:
+		prn += printf("%s%ju%s",
+				token2str[token->kind],
+				token->cst.integer.value,
+				affix2str[token->cst.integer.suffix]
+		);
+		break;
+	case TOKEN_FLOATING_CONSTANT:
+		prn += printf("%s%.9Lg%s",
+				token2str[token->kind],
+				token->cst.floating.value,
+				affix2str[token->cst.floating.suffix]
+		);
+		break;
+	case TOKEN_ENUMERATION_CONSTANT:
+		prn += printf("%s", token2str[token->kind]);
+		prn += print_intern(token->ident.detail);
+		break;
+	case TOKEN_CHARACTER_CONSTANT:
+		prn += printf(token->cst.character.prefix == CONSTANT_AFFIX_L ? "%sL'%lc'": "%s'%c'",
+				token2str[token->kind],
+				token->cst.character.value
+		);
 		break;
 	case TOKEN_STRING_LITERAL:
-		if (token->detail == TOKEN_DETAIL_STRING_LITERAL) {
+		if (token->lit.prefix == CONSTANT_AFFIX_NONE) {
 			prn += printf("%s\"%.*s\"",
-					token_detail_to_str[token->detail],
-					token->string.len,
-					token->string.start
+					token2str[token->kind],
+					(int) token->lit.len,
+					(char *) token->lit.sequence
 			);
-		} else if (token->detail == TOKEN_DETAIL_WIDE_STRING_LITERAL) {
+		} else if (token->lit.prefix == CONSTANT_AFFIX_L) {
 			prn += printf("%s\"%.*ls\"",
-					token_detail_to_str[token->detail],
-					(int) encode_utf_8_len(token->wstring.start, NULL),
-					token->wstring.start
+					token2str[token->kind],
+					(int) encode_utf_8_len(token->lit.sequence, NULL),
+					(uint32_t *) token->lit.sequence
 			);
 		} else __builtin_unreachable();
 		break;
-	case TOKEN_PUNCTUATOR:
-		prn += printf("%s", token_detail_to_str[token->detail]);
+	case TOKEN_PUNCTUATOR_START ... TOKEN_PUNCTUATOR_END - 1:
+		prn += printf("%s", token2str[token->kind]);
 		break;
-	case TOKEN_NUM:
+	case TOKEN_KEYWORD_END:
+	case TOKEN_CONSTANT_END:
+	case TOKEN_PUNCTUATOR_END:
+	case TOKEN_END:
 	default:
 		__builtin_unreachable();
 	}

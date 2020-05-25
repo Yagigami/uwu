@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "intern/intern.h"
 #include <uwu/uwu.h>
@@ -15,17 +16,17 @@ int intern_init(struct Interns *interns) {
 
 void intern_fini(struct Interns *interns) {
 	if (!interns) return;
-	for (long i = 0; i < interns->len; i++) {
+	for (ptrdiff_t i = 0; i < interns->len; i++) {
 		free(interns->interns[i].str);
 	}
 	free(interns->interns);
 }
 
-const struct InternString *intern_string(struct Interns *interns, const uint8_t *str, long len) {
+const struct InternString *intern_string(struct Interns *interns, const uint8_t *str, ptrdiff_t len) {
 	const struct InternString *in = intern_find(interns, str, len);
 	if (in) return in;
 	if (interns->len+1 > interns->cap) {
-		long cap = interns->cap*2+1;
+		ptrdiff_t cap = interns->cap*2+1;
 		struct InternString *tmp = realloc(interns->interns, cap * sizeof (*tmp));
 		if (!tmp) return NULL;
 		interns->interns = tmp;
@@ -39,8 +40,8 @@ const struct InternString *intern_string(struct Interns *interns, const uint8_t 
 	return intern;
 }
 
-const struct InternString *intern_find(const struct Interns *interns, const uint8_t *str, long len) {
-	for (long i=0; i<interns->len; i++) {
+const struct InternString *intern_find(const struct Interns *interns, const uint8_t *str, ptrdiff_t len) {
+	for (ptrdiff_t i=0; i<interns->len; i++) {
 		const struct InternString *intern = interns->interns+i;
 		if (len == intern->len && memcmp(str, intern->str, len) == 0) {
 			return intern;
@@ -49,13 +50,13 @@ const struct InternString *intern_find(const struct Interns *interns, const uint
 	return NULL;
 }
 
-bool intern_contains(const struct Interns *interns, const uint8_t *str, long len) {
+bool intern_contains(const struct Interns *interns, const uint8_t *str, ptrdiff_t len) {
 	return intern_find(interns, str, len);
 }
 
 int print_interns(const struct Interns *interns) {
 	int total = 0, printed = 0, stop = 80;
-	if (interns) for (long i = 0; i < interns->len; i++) {
+	if (interns) for (ptrdiff_t i = 0; i < interns->len; i++) {
 		int ret = print_intern(interns->interns+i);
 		total += ret;
 		printed += ret;
@@ -73,50 +74,50 @@ int print_intern(const struct InternString *intern) {
 }
 
 const struct Interns *get_keyword_interns(void) {
-	static const struct InternString kws[TOKEN_DETAIL_KEYWORDS_END-TOKEN_DETAIL_KEYWORDS_START] = {
+	static const struct InternString kws[TOKEN_KEYWORD_END - TOKEN_KEYWORD_START] = {
 #define ELEM(a, b) \
-	[TOKEN_DETAIL_KEYWORD_ ## a - TOKEN_DETAIL_KEYWORDS_START] = { \
+	[a - TOKEN_KEYWORD_START] = { \
 		.str = (uint8_t *) # b, \
 		.len = sizeof (# b)-1, \
 	}
 // sizeof (# b)-1 is like strlen but we need a constant expression
-		ELEM(AUTO, auto),
-		ELEM(BREAK, break),
-		ELEM(CASE, case),
-		ELEM(CHAR, char),
-		ELEM(CONST, const),
-		ELEM(CONTINUE, continue),
-		ELEM(DEFAULT, default),
-		ELEM(DO, do),
-		ELEM(DOUBLE, double),
-		ELEM(ELSE, else),
-		ELEM(ENUM, enum),
-		ELEM(EXTERN, extern),
-		ELEM(FLOAT, float),
-		ELEM(FOR, for),
-		ELEM(GOTO, goto),
-		ELEM(IF, if),
-		ELEM(INLINE, inline),
-		ELEM(INT, int),
-		ELEM(LONG, long),
-		ELEM(REGISTER, register),
-		ELEM(RESTRICT, restrict),
-		ELEM(RETURN, return),
-		ELEM(SHORT, short),
-		ELEM(SIGNED, signed),
-		ELEM(SIZEOF, sizeof),
-		ELEM(STATIC, static),
-		ELEM(STRUCT, struct),
-		ELEM(SWITCH, switch),
-		ELEM(TYPEDEF, typedef),
-		ELEM(UNION, union),
-		ELEM(UNSIGNED, unsigned),
-		ELEM(VOID, void),
-		ELEM(VOLATILE, volatile),
-		ELEM(WHILE, while),
-		ELEM(BOOL, _Bool),
-		ELEM(COMPLEX, _Complex),
-		ELEM(IMAGINARY, _Imaginary),
+		ELEM(TOKEN_AUTO     , auto      ),
+		ELEM(TOKEN_BREAK    , break     ),
+		ELEM(TOKEN_CASE     , case      ),
+		ELEM(TOKEN_CHAR     , char      ),
+		ELEM(TOKEN_CONST    , const     ),
+		ELEM(TOKEN_CONTINUE , continue  ),
+		ELEM(TOKEN_DEFAULT  , default   ),
+		ELEM(TOKEN_DO       , do        ),
+		ELEM(TOKEN_DOUBLE   , double    ),
+		ELEM(TOKEN_ELSE     , else      ),
+		ELEM(TOKEN_ENUM     , enum      ),
+		ELEM(TOKEN_EXTERN   , extern    ),
+		ELEM(TOKEN_FLOAT    , float     ),
+		ELEM(TOKEN_FOR      , for       ),
+		ELEM(TOKEN_GOTO     , goto      ),
+		ELEM(TOKEN_IF       , if        ),
+		ELEM(TOKEN_INLINE   , inline    ),
+		ELEM(TOKEN_INT      , int       ),
+		ELEM(TOKEN_LONG     , long      ),
+		ELEM(TOKEN_REGISTER , register  ),
+		ELEM(TOKEN_RESTRICT , restrict  ),
+		ELEM(TOKEN_RETURN   , return    ),
+		ELEM(TOKEN_SHORT    , short     ),
+		ELEM(TOKEN_SIGNED   , signed    ),
+		ELEM(TOKEN_SIZEOF   , sizeof    ),
+		ELEM(TOKEN_STATIC   , static    ),
+		ELEM(TOKEN_STRUCT   , struct    ),
+		ELEM(TOKEN_SWITCH   , switch    ),
+		ELEM(TOKEN_TYPEDEF  , typedef   ),
+		ELEM(TOKEN_UNION    , union     ),
+		ELEM(TOKEN_UNSIGNED , unsigned  ),
+		ELEM(TOKEN_VOID     , void      ),
+		ELEM(TOKEN_VOLATILE , volatile  ),
+		ELEM(TOKEN_WHILE    , while     ),
+		ELEM(TOKEN_BOOL     , _Bool     ),
+		ELEM(TOKEN_COMPLEX  , _Complex  ),
+		ELEM(TOKEN_IMAGINARY, _Imaginary),
 #undef ELEM
 	};
 	static const struct Interns interns = {

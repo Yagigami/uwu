@@ -7,25 +7,18 @@
 #include "uwu/enums.h"
 #include <common/enums.h>
 #include <intern/intern.h>
+#include <ast/common.h>
 
 struct Token {
 	enum TokenKind kind;
-	enum TokenDetail detail;
+#ifndef NDEBUG
 	const uint8_t *start;
-	enum ConstantAffix affix;
-	int len;
+	ptrdiff_t len;
+#endif
 	__extension__ union {
-		uint32_t character;
-		struct {
-			uint8_t *start;
-			int len;
-		} string;
-		struct {
-			uint32_t *start;
-			int len;
-		} wstring;
-		uintmax_t integer;
-		long double floating;
+		struct Constant cst;
+		struct StringLiteral lit;
+		struct Identifier ident;
 	};
 };
 

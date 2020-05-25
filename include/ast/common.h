@@ -9,8 +9,7 @@
 #include "ast/enums.h"
 
 struct Identifier {
-	const uint8_t *name;
-	ptrdiff_t len;
+	const struct InternString *detail;
 };
 
 struct IdentifierList {
@@ -49,8 +48,8 @@ struct Constant {
 };
 
 struct StringLiteral {
+	void *sequence;
 	enum ConstantAffix prefix;
-	const uint8_t *sequence;
 	ptrdiff_t len;
 };
 
