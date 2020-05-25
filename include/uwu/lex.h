@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #include "uwu/enums.h"
-#include "ast/common.h"
 #include <intern/intern.h>
 
 struct Token {
