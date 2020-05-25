@@ -13,7 +13,7 @@ struct InitDeclaratorList {
 
 struct Declaration {
 	struct DeclarationSpecifierList specs;
-	struct InitDeclaratorList declarators;
+	struct InitDeclaratorList inits;
 };
 
 struct Declarator {

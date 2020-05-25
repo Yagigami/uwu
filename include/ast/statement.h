@@ -32,9 +32,9 @@ struct Statement {
 				struct Expression  *expr;
 				struct Declaration *decl;
 			} init;
-			struct Expression *iter_cond;
+			struct Expression *cond;
 			struct Expression *next_expr;
-			struct Statement  *stmt;
+			struct Statement  *body;
 		} iter;
 		struct Identifier ident;
 	};

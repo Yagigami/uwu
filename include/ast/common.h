@@ -36,16 +36,6 @@ struct CharacterConstant {
 	uint32_t value;
 };
 
-struct Constant {
-	enum ConstantKind kind;
-	__extension__ union {
-		struct IntegerConstant integer;
-		struct FloatingConstant floating;
-		struct EnumerationConstant enumeration;
-		struct CharacterConstant character;
-	};
-};
-
 struct StringLiteral {
 	void *sequence;
 	enum ConstantAffix prefix;
@@ -117,7 +107,7 @@ struct TypeQualifierList {
 struct ParameterTypeList {
 	ptrdiff_t num;
 	bool ellipsis;
-	struct ParameterDeclaration *params;
+	struct ParameterDeclaration *list;
 };
 
 struct DeclarationSpecifierList {

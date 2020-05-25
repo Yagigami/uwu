@@ -475,9 +475,8 @@ const uint8_t *lex_character(struct Lexer *lexer) {
 	uint32_t value = read_character(start, false, &out);
 	if (out == start) return NULL;
 	lexer->token.kind = TOKEN_CHARACTER_CONSTANT;
-	lexer->token.cst.kind = CONSTANT_CHARACTER;
-	lexer->token.cst.character.prefix = CONSTANT_AFFIX_NONE;
-	lexer->token.cst.character.value = value;
+	lexer->token.character.prefix = CONSTANT_AFFIX_NONE;
+	lexer->token.character.value = value;
 	return out;
 }
 
@@ -595,9 +594,8 @@ const uint8_t *lex_integer(struct Lexer *lexer, int base) {
 	}
 
 	lexer->token.kind = TOKEN_INTEGER_CONSTANT;
-	lexer->token.cst.kind = CONSTANT_INTEGER;
-	lexer->token.cst.integer.value = val;
-	lexer->token.cst.integer.suffix = suffix;
+	lexer->token.integer.value = val;
+	lexer->token.integer.suffix = suffix;
 	return end;
 }
 
@@ -705,9 +703,8 @@ const uint8_t *lex_floating(struct Lexer *lexer, int base) {
 	}
 
 	lexer->token.kind = TOKEN_FLOATING_CONSTANT;
-	lexer->token.cst.kind = CONSTANT_FLOATING;
-	lexer->token.cst.floating.value = val;
-	lexer->token.cst.floating.suffix = suffix;
+	lexer->token.floating.value = val;
+	lexer->token.floating.suffix = suffix;
 	return end;
 }
 
@@ -718,9 +715,8 @@ const uint8_t *lex_wide_character(struct Lexer *lexer) {
 	uint32_t value = read_character(start, true, &out);
 	if (out == start) return NULL;
 	lexer->token.kind = TOKEN_CHARACTER_CONSTANT;
-	lexer->token.cst.kind = CONSTANT_CHARACTER;
-	lexer->token.cst.character.value = value;
-	lexer->token.cst.character.prefix = CONSTANT_AFFIX_L;
+	lexer->token.character.value = value;
+	lexer->token.character.prefix = CONSTANT_AFFIX_L;
 	return out;
 }
 
@@ -806,15 +802,15 @@ int print_token(const struct Token *token) {
 	case TOKEN_INTEGER_CONSTANT:
 		prn += printf("%s%ju%s",
 				token2str[token->kind],
-				token->cst.integer.value,
-				affix2str[token->cst.integer.suffix]
+				token->integer.value,
+				affix2str[token->integer.suffix]
 		);
 		break;
 	case TOKEN_FLOATING_CONSTANT:
 		prn += printf("%s%.9Lg%s",
 				token2str[token->kind],
-				token->cst.floating.value,
-				affix2str[token->cst.floating.suffix]
+				token->floating.value,
+				affix2str[token->floating.suffix]
 		);
 		break;
 	case TOKEN_ENUMERATION_CONSTANT:
@@ -822,9 +818,9 @@ int print_token(const struct Token *token) {
 		prn += print_intern(token->ident.detail);
 		break;
 	case TOKEN_CHARACTER_CONSTANT:
-		prn += printf(token->cst.character.prefix == CONSTANT_AFFIX_L ? "%sL'%lc'": "%s'%c'",
+		prn += printf(token->character.prefix == CONSTANT_AFFIX_L ? "%sL'%lc'": "%s'%c'",
 				token2str[token->kind],
-				token->cst.character.value
+				token->character.value
 		);
 		break;
 	case TOKEN_STRING_LITERAL:

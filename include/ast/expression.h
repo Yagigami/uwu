@@ -7,7 +7,7 @@
 
 struct ArgumentExpressionList {
 	ptrdiff_t num;
-	struct Expression **exprs;
+	struct Expression **list;
 };
 
 struct InitializerList {
@@ -20,7 +20,11 @@ struct Expression {
 	enum Operator op;
 	__extension__ union {
 		struct Identifier ident;
-		struct Constant cst;
+		struct IntegerConstant integer;
+		struct FloatingConstant floating;
+		// ...
+		struct EnumerationConstant enumeration;
+		struct CharacterConstant character;
 		struct StringLiteral string_lit;
 		struct {
 			struct Expression *expr;

@@ -16,7 +16,11 @@ struct Token {
 	ptrdiff_t len;
 #endif
 	__extension__ union {
-		struct Constant cst;
+		struct IntegerConstant integer;
+		struct FloatingConstant floating;
+		// not sure this one should be here
+		struct EnumerationConstant enumeration;
+		struct CharacterConstant character;
 		struct StringLiteral lit;
 		struct Identifier ident;
 	};
