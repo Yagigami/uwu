@@ -29,7 +29,6 @@ struct FloatingConstant {
 
 struct EnumerationConstant {
 	struct Identifier ident;
-	uintmax_t value;
 };
 
 struct CharacterConstant {
@@ -61,8 +60,8 @@ struct HeaderName {
 struct SpecifierQualifier {
 	bool is_specifier;
 	__extension__ union {
-		struct TypeSpecifier *specifier;
-		struct TypeQualifier *qualifier;
+		struct TypeSpecifier *spec;
+		enum TypeQualifier *qual;
 	};
 };
 
@@ -83,7 +82,7 @@ struct StructDeclaratorList {
 
 struct StructDeclaration {
 	struct SpecifierQualifierList specquals;
-	struct StructDeclaratorList declarators;
+	struct StructDeclaratorList declts;
 };
 
 struct EnumeratorList {
@@ -93,11 +92,11 @@ struct EnumeratorList {
 
 struct Enumerator {
 	struct EnumerationConstant cst;
-	struct ConstantExpression *expr;
+	struct Expression *expr;
 };
 
 struct TypeSpecifier {
-	enum TypeSpecifierKind kind;
+	enum DeclarationSpecifierKind kind;
 	struct Identifier *ident;
 	__extension__ union {
 		struct StructDeclarationList decls;
@@ -105,18 +104,14 @@ struct TypeSpecifier {
 	};
 };
 
-struct TypeQualifier {
-	enum TypeQualifierKind kind;
-};
-
 struct TypeName {
-	struct SpecifierQualifierList qualifiers;
-	struct Declarator *declarator;
+	struct SpecifierQualifierList quals;
+	struct Declarator *declt;
 };
 
 struct TypeQualifierList {
 	ptrdiff_t num;
-	struct TypeQualifier *list;
+	enum TypeQualifier *list;
 };
 
 struct ParameterTypeList {
@@ -125,15 +120,23 @@ struct ParameterTypeList {
 	struct ParameterDeclaration *params;
 };
 
-struct DeclarationSpecifiers {
+struct DeclarationSpecifierList {
 	ptrdiff_t num;
-	enum DeclarationSpecifierKind *kinds;
-	int *list;
+	struct DeclarationSpecifier *list;
+};
+
+struct DeclarationSpecifier {
+	enum DeclarationSpecifierKind kind;
+	struct Identifier *ident; // only for structs/unions/enums/typedef-names
+	__extension__ union {
+		struct StructDeclarationList decls;
+		struct EnumeratorList enums;
+	};
 };
 
 struct ParameterDeclaration {
-	struct DeclarationSpecifiers specifiers;
-	struct Declarator *declarator;
+	struct DeclarationSpecifierList specs;
+	struct Declarator *declt;
 };
 
 #endif /* C_AST_COMMON_H */

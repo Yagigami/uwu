@@ -12,7 +12,7 @@ struct InitDeclaratorList {
 };
 
 struct Declaration {
-	struct DeclarationSpecifiers specs;
+	struct DeclarationSpecifierList specs;
 	struct InitDeclaratorList declarators;
 };
 
@@ -20,6 +20,7 @@ struct Declarator {
 	enum DeclaratorKind kind;
 	struct Declarator *base;
 	__extension__ union {
+		struct Identifier ident;
 		__extension__ struct {
 			struct TypeQualifierList quals;
 			struct Expression *expr;
@@ -30,7 +31,7 @@ struct Declarator {
 };
 
 struct InitDeclarator {
-	struct Declarator declarator;
+	struct Declarator declt;
 	struct Initializer *init;
 };
 
