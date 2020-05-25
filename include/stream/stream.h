@@ -21,8 +21,6 @@ Stream __uwunull(void);
 
 #include <stddef.h>
 
-int stream_test(void);
-
 Stream stream_init(const char *title, int mode);
 void stream_fini(Stream stream);
 

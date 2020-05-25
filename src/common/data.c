@@ -1,5 +1,6 @@
 #include "common/data.h"
 #include <uwu/enums.h>
+#include <common/enums.h>
 
 const char *token_detail_to_str[] = {
 	[TOKEN_DETAIL_NONE] = "x:<END>",

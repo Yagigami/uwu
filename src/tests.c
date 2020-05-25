@@ -1,6 +1,6 @@
-#include <stream/stream.h>
-#include <pp/pp.h>
-#include <uwu/uwu.h>
+#include <stream/tests.h>
+#include <pp/tests.h>
+#include <uwu/tests.h>
 #include <common/tests.h>
 
 #include <stdio.h>
@@ -11,7 +11,7 @@ void run_tests(int argc, char **argv) {
 		&stream_test,
 		&pp_test,
 		&lex_test,
-		&common_tests,
+		&common_test,
 	}, (**end) (void) = tests + sizeof (tests) / sizeof (*tests);
 	for (int (**test) (void) = tests; test != end; test++) {
 		int err = (*test)();
