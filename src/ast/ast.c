@@ -61,7 +61,7 @@ struct Expression *expr_string_literal(struct StringLiteral lit) {
 }
 
 struct Expression *expr_index(struct Expression *arr, struct Expression *index) {
-	struct Expression *expr = new_expression(EXPRESSION_POSTFIX);
+	struct Expression *expr = new_expression(EXPRESSION_INDEX);
 	expr->op = OPERATOR_INDEX;
 	expr->postfix.expr = arr;
 	expr->postfix.index = index;
@@ -69,7 +69,7 @@ struct Expression *expr_index(struct Expression *arr, struct Expression *index) 
 }
 
 struct Expression *expr_call(struct Expression *fun, struct Expression **args, ptrdiff_t n) {
-	struct Expression *expr = new_expression(EXPRESSION_POSTFIX);
+	struct Expression *expr = new_expression(EXPRESSION_CALL);
 	expr->op = OPERATOR_CALL;
 	expr->postfix.expr = fun;
 	expr->postfix.args.list = args;
@@ -78,7 +78,7 @@ struct Expression *expr_call(struct Expression *fun, struct Expression **args, p
 }
 
 struct Expression *expr_field(struct Expression *agg, struct Identifier field) {
-	struct Expression *expr = new_expression(EXPRESSION_POSTFIX);
+	struct Expression *expr = new_expression(EXPRESSION_FIELD);
 	expr->op = OPERATOR_FIELD;
 	expr->postfix.expr = agg;
 	expr->postfix.ident = field;
@@ -95,6 +95,7 @@ struct Expression *expr_arrow(struct Expression *agg, struct Identifier field) {
 
 struct Expression *expr_compound_literal(struct TypeName *type, struct InitializerListElem *inits, ptrdiff_t n) {
 	struct Expression *expr = new_expression(EXPRESSION_COMPOUND_LITERAL);
+	expr->op = OPERATOR_COMPOUND;
 	expr->compound_literal.type_name = type;
 	expr->compound_literal.inits.list = inits;
 	expr->compound_literal.inits.num = n;
@@ -102,7 +103,7 @@ struct Expression *expr_compound_literal(struct TypeName *type, struct Initializ
 }
 
 struct Expression *expr_unary(struct Expression *operand, enum Operator op) {
-	struct Expression *expr = new_expression(EXPRESSION_UNARY);
+	struct Expression *expr = new_expression(EXPRESSION_UNARY_EXPR);
 	assert(op >= OPERATOR_UNARY_START &&
 			op < OPERATOR_UNARY_END &&
 			op != OPERATOR_SIZEOF_TYPE);
@@ -112,7 +113,7 @@ struct Expression *expr_unary(struct Expression *operand, enum Operator op) {
 }
 
 struct Expression *expr_unary_type(struct TypeName *type, enum Operator op) {
-	struct Expression *expr = new_expression(EXPRESSION_UNARY);
+	struct Expression *expr = new_expression(EXPRESSION_UNARY_TYPE);
 	assert(op == OPERATOR_SIZEOF_TYPE);
 	expr->op = op;
 	expr->unary.type_name = type;
@@ -131,6 +132,7 @@ struct Expression *expr_binary(struct Expression *lhs, struct Expression *rhs, e
 
 struct Expression *expr_ternary(struct Expression *cond, struct Expression *then, struct Expression *other) {
 	struct Expression *expr = new_expression(EXPRESSION_TERNARY);
+	expr->op = OPERATOR_TERNARY;
 	expr->ternary.cond_expr = cond;
 	expr->ternary.then_expr = then;
 	expr->ternary.else_expr = other;
@@ -139,14 +141,9 @@ struct Expression *expr_ternary(struct Expression *cond, struct Expression *then
 
 struct Expression *expr_comma(struct Expression **exprs, ptrdiff_t n) {
 	struct Expression *expr = new_expression(EXPRESSION_COMMA);
+	expr->op = OPERATOR_COMMA;
 	expr->comma.exprs = exprs;
 	expr->comma.num = n;
-	return expr;
-}
-
-struct Expression *expr_defined(struct Identifier ident) {
-	struct Expression *expr = new_expression(EXPRESSION_DEFINED);
-	expr->ident = ident;
 	return expr;
 }
 
@@ -156,7 +153,7 @@ struct Declarator *declt_identifier(struct Identifier ident) {
 	return declt;
 }
 
-struct Declarator *declt_pointer(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n) {
+struct Declarator *declt_pointer(struct Declarator *base, enum DeclarationSpecifierKind *quals, ptrdiff_t n) {
 	struct Declarator *declt = new_declarator(DECLARATOR_POINTER);
 	declt->base = base;
 	declt->quals.list = quals;
@@ -164,19 +161,9 @@ struct Declarator *declt_pointer(struct Declarator *base, enum TypeQualifier *qu
 	return declt;
 }
 
-struct Declarator *declt_array(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n,
+struct Declarator *declt_array(struct Declarator *base, enum DeclarationSpecifierKind *quals, ptrdiff_t n,
 		struct Expression *cnt) {
 	struct Declarator *declt = new_declarator(DECLARATOR_ARRAY);
-	declt->base = base;
-	declt->quals.list = quals;
-	declt->quals.num = n;
-	declt->expr = cnt;
-	return declt;
-}
-
-struct Declarator *declt_array_least(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n,
-		struct Expression *cnt) {
-	struct Declarator *declt = new_declarator(DECLARATOR_VLA_STATIC);
 	declt->base = base;
 	declt->quals.list = quals;
 	declt->quals.num = n;
@@ -272,7 +259,7 @@ struct Statement *stmt_switch(struct Expression *select, struct Statement *body)
 }
 
 struct Statement *stmt_while(struct Expression *cond, struct Statement *body) {
-	struct Statement *stmt = new_statement(STAMENENT_WHILE);
+	struct Statement *stmt = new_statement(STATEMENT_WHILE);
 	stmt->iter.cond = cond;
 	stmt->iter.body = body;
 	return stmt;

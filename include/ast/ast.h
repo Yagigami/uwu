@@ -26,13 +26,10 @@ struct Expression *expr_unary_type(struct TypeName *type, enum Operator op);
 struct Expression *expr_binary(struct Expression *lhs, struct Expression *rhs, enum Operator op);
 struct Expression *expr_ternary(struct Expression *cond, struct Expression *then, struct Expression *other);
 struct Expression *expr_comma(struct Expression **exprs, ptrdiff_t n);
-struct Expression *expr_defined(struct Identifier ident);
 
 struct Declarator *declt_identifier(struct Identifier ident);
-struct Declarator *declt_pointer(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n);
-struct Declarator *declt_array(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n,
-		struct Expression *cnt);
-struct Declarator *declt_array_least(struct Declarator *base, enum TypeQualifier *quals, ptrdiff_t n,
+struct Declarator *declt_pointer(struct Declarator *base, enum DeclarationSpecifierKind *quals, ptrdiff_t n);
+struct Declarator *declt_array(struct Declarator *base, enum DeclarationSpecifierKind *quals, ptrdiff_t n,
 		struct Expression *cnt);
 struct Declarator *declt_function(struct Declarator *base,
 		struct ParameterDeclaration *params, ptrdiff_t n);

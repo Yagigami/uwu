@@ -1,7 +1,6 @@
 #ifndef C_AST_ENUMS_H
 #define C_AST_ENUMS_H
 
-#include "ast/constant_enums.h"
 #include "ast/expression_enums.h"
 #include "ast/declaration_enums.h"
 #include "ast/statement_enums.h"
